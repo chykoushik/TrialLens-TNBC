@@ -18,6 +18,7 @@ test('Home has four destinations, clear source boundaries and no duplicated work
   expect(screen.getByRole('button', { name: 'Browse saved trials' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Application mode')).not.toBeInTheDocument()
   expect(screen.getByText(/No clinical use/)).toBeInTheDocument()
+  expect(within(screen.getByRole('contentinfo')).getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/chykoushik/TrialLens-TNBC')
   fireEvent.click(screen.getByRole('button', { name: 'Try the demo' }))
   fireEvent.click(screen.getByText('Advanced Mode', { selector: 'summary' }))
   await waitFor(() => expect(screen.getByLabelText('Fictional TNBC case')).toHaveValue('tnbc-record-gaps'))

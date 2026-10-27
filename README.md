@@ -1,5 +1,7 @@
 # TrialLens-TNBC
-https://triallens-tnbc.onrender.com/
+
+[Live demo](https://triallens-tnbc.onrender.com/) · [GitHub](https://github.com/chykoushik/TrialLens-TNBC)
+
 A research prototype for reviewing missing, conflicting and time-dependent evidence in fictional triple-negative breast cancer (TNBC) trial scenarios. The demonstration runs locally without API credentials. This is not a validated clinical eligibility system, diagnostic tool or treatment recommendation service.
 
 ## Overview
@@ -34,6 +36,39 @@ The source also contains a controlled local workspace for registry browsing, str
 
 Research Tools distinguishes failed model extraction from accepted source evidence. Registry links are context, not the source of the fictional patient's assessment.
 
+## Research results and scope
+
+The public application is a fictional demonstration with symbolic assessment and review planning. The separate research implementation evaluates probabilistic policies, compiled belief inference and interval certification. That implementation, its datasets and its experiment artifacts are not distributed here. The research experiments are not reproducible from this checkout; the installation and tests below cover the public application.
+
+Completed studies support the following limited findings:
+
+| Study | Verified result | Interpretation |
+|---|---|---|
+| Compiled inference | 96 successful matched reference comparisons agreed within 5.22e-15. Of 252 isolated benchmark runs, 159 succeeded, 84 were unsupported and nine timed out. | Exact substitution under the specified synthetic source model; not a general scalability or clinical accuracy result. |
+| Continuous risk certification | In the final 24-instance synthetic study, certified policies had zero violations of the 0.08 expected protocol-error cap across 48 budget conditions; under severe model shift, 18 of 24 conditions violated the cap. The utility gain over the feasible baseline library was 0.002018, 95% CI [0.000321, 0.004368], Holm-adjusted p=0.07649. | Bounds depend on fixed priors, dependence assumptions and a common reliability multiplier in [0.65, 1.8]. The latest comparison does not establish superiority after multiplicity correction. |
+| METABRIC archival rule proxies | Among 1,021 evaluation patients, nominal constrained planning, unconstrained planning and one/two-step lookahead tied at 0.3428% proxy error and 92.1156% decision coverage with a two-review budget. | No incremental risk-constraint advantage in this primary comparison. Authentic attributes and deterministic rule proxies are not clinician-verified eligibility labels. |
+| Stricter risk limits | In a separate 256-patient study with simulated observation errors, a stricter nominal limit reduced proxy error from 2.7344% to 0.6548%, while coverage fell from 90.8854% to 70.4918% and utility from 0.977682 to 0.759691. The error difference had Holm-adjusted p=0.01897. | Lower all-case error came with increased abstention, including withheld correct decisions; it is not a cost-free safety gain. |
+| Selection and coverage controls | Confidence-based primary coverage matching failed its requested-target criterion. A separate shared-MAP, outcome-blind quota control at 70% expected coverage gave 7.3230% proxy error for the strict-risk selectors versus 4.1563% for unconstrained and optimal fixed selection. | No established practical superiority of adaptive constrained selection. The quota control changes the decoder and does not inherit the native risk guarantee. |
+| Authentic pathology sources | 1,075 TCGA-BRCA PDFs were obtained for 1,068 patients. Only three patients had two distinct records after alias review; none had verified longitudinal chronology. | Source acquisition and linkage do not establish a longitudinal clinical benchmark or complete eligibility ground truth. |
+
+METABRIC contained 2,509 archival patients. The original three-field TNBC rule selected 320, including 51 with conflicting alternate ER evidence. Reconciliation yielded 269 concordant-by-available-evidence cases and 69 discordant potential TNBC cases. These are operational source categories, not adjudicated diagnoses. Observation probabilities and review costs in the planning experiments were assumed rather than clinically calibrated.
+
+The extraction generalization study processed an internal holdout of **100 patients and 100 reports** outside documented review and tuning sets. Source-image review covered **24 patients**, yielding 92 research-transcribed facts. Only **eight patients contributed the 20 categorical ER/PR/HER2 reference findings** below. These transcriptions were not clinician-adjudicated, and the corpus had previously been bulk-processed.
+
+| Automatic extraction method | Known source-supported findings recovered | Supported / accepted categorical assertions in the audited subset |
+|---|---:|---:|
+| Original | 11/20 | 21/30 (70.0%) |
+| v1 | 20/20 | 39/53 (73.6%) |
+| v2 context filtering | 20/20 | 39/50 (78.0%) |
+| Joint ER/PR correction | 20/20 | 39/54 (72.2%) |
+| Selective verification | 17/20 | 29/42 (69.0%) |
+
+Context filtering removed three unsupported assertions without losing supported assertions in the audited subset. Joint correction passed all 44 software controls but added four unsupported definition spans on new cases. Selective verification withheld ten supported assertions. Patient-bootstrap precision intervals were wide: 65.9%-94.1% for v2 context filtering and 55.8%-94.1% for joint correction. Perfect recovery of 20 known findings is not whole-document recall or evidence of population-perfect performance. Image-assisted transcription results were evaluated separately and are not automatic OCR capability.
+
+The source study identifiers are `20261026-compiled-review-v2`, `20261026-certified-review-v1`, `metabric_realdata_v1`, `metabric_risk_reconciliation_v1`, `matched_coverage_v1`, `clinical_validation_v1`, `real_bc_reports_v1` and `clinical_extraction_generalization_v1`. The reported values come from their saved benchmark checks, paired statistics, source inventories and extraction metrics; those local artifacts are not bundled with the demo. The retrospective Nemotron attempt shown in Research Showcase is a separate extraction-validation example, not these pathology benchmark results.
+
+Clinical eligibility remains unvalidated. Independent adjudication, dated patient-linked records, calibrated observation models, measured review effort and external validation are still required. Exact source offsets and passing software tests do not prove clinical interpretation or safety.
+
 ## Architecture and technology stack
 
 ```text
@@ -65,15 +100,14 @@ Actual local application captures using fictional data:
 
 ## Clone or download
 
-No public repository URL is verified yet. After publication, copy its actual HTTPS clone URL from GitHub:
+Clone the public repository:
 
 ```powershell
-$repositoryUrl = Read-Host 'Paste the published repository HTTPS clone URL'
-git clone $repositoryUrl TrialLens-TNBC
+git clone https://github.com/chykoushik/TrialLens-TNBC.git
 Set-Location TrialLens-TNBC
 ```
 
-Alternatively use GitHub **Code > Download ZIP**, extract it and open PowerShell in the extracted project directory. This README is the only Markdown document in the proposed public package.
+Alternatively use GitHub **Code > Download ZIP**, extract it and open PowerShell in the extracted project directory.
 
 ## Backend installation and configuration
 
@@ -123,7 +157,7 @@ Copy-Item third_party/licenses/*.txt frontend/dist/assets/licenses/
 | `NEBIUS_LIVE_EXTRACTION` | `0` | Live extraction disabled. |
 | `NEBIUS_INPUT_USD_PER_MILLION` / `NEBIUS_OUTPUT_USD_PER_MILLION` | empty | Optional declared pricing; no price assumed. |
 | `TRIALLENS_LIVE_INFERENCE` | `0` | Additional opt-in for the public operator API. |
-| `TRIALLENS_LIVE_OPERATOR_TOKEN` | empty | Separate operator authentication secret, 32â€“128 URL-safe characters; never reuse the Nebius key. |
+| `TRIALLENS_LIVE_OPERATOR_TOKEN` | empty | Separate operator authentication secret, 32-128 URL-safe characters; never reuse the Nebius key. |
 | `TRIALLENS_LIVE_STATE_DIR` | empty | Absolute path to durable, writable reservation storage; required for live mode. |
 
 ## Start the backend and frontend
@@ -254,9 +288,9 @@ This checks real API-backed fictional review, session handling, keyboard use, re
 
 ## Deployment information
 
-There is no verified hosted URL. Existing `Dockerfile` and `render.yaml` describe a Node build stage, Python 3.12 runtime, non-root user and `PORT` configuration. Render checks `/api/readiness`, which returns HTTP 503 if the fictional cases or built frontend are unavailable; `/api/health` remains a liveness endpoint. Auto-deploy is disabled. The container launcher is `python -B -m backend.serve_public`.
+The public demo is hosted at https://triallens-tnbc.onrender.com/. `Dockerfile` and `render.yaml` define a Node build stage, Python 3.12 runtime, non-root user and `PORT` configuration. Render checks `/api/readiness`, which returns HTTP 503 if the fictional cases or built frontend are unavailable; `/api/health` remains a liveness endpoint. The blueprint disables auto-deploy. The container launcher is `python -B -m backend.serve_public`.
 
-Local startup verification does not establish a successful Docker/Linux build or hosted deployment. The owner must verify those before claiming availability. Repository preparation performs no deployment.
+The hosted service passed HTTP health and readiness checks on 28 October 2026 with paid inference disabled. Those checks establish availability at that time, not clinical validity, successful provider inference or verification of a particular deployed commit. Local tests and builds do not deploy the service.
 
 The default Render blueprint leaves both live enable flags at `0` and needs no persistent application data. For optional live mode, use one service instance with a [Render persistent disk](https://render.com/docs/disks), available on paid services. Mount durable storage, for example at `/var/data`, and set `TRIALLENS_LIVE_STATE_DIR` to a writable directory on that disk. Ensure Docker UID 10001 can create and retain the reservation file there; unwritable storage fails closed before inference. Set the Nebius key and separate operator token privately in the hosting dashboard, configure the model/base URL, then explicitly set both enable flags to `1`. Keep both secrets out of `render.yaml`, the frontend build and logs. Keep the existing public entry point; do not expose the broader controlled app to enable this feature.
 
@@ -270,10 +304,10 @@ The controlled NVIDIA Nemotron / Nebius integration produced saved attempts, inc
 
 ## License and attribution
 
-The project-owned source code in this repository is licensed under the Mozilla Public License, version 2.0 (MPL-2.0); see `LICENSE` for the complete official text. Third-party materials retain their own terms. The license selection is approved, but the available records do not establish copyright ownership or contributor rights. Publication remains blocked until the owner confirms the necessary rights. No copyright holder has been invented. This preparation is not legal clearance.
+The project-owned source code in this repository is licensed under the Mozilla Public License, version 2.0 (MPL-2.0); see `LICENSE` for the complete text. Third-party materials retain their own terms. Software tests do not establish copyright ownership or contributor permissions; those remain the responsibility of the contributors and repository owner.
 
-When distributing compiled frontend code or a container, make the corresponding MPL-covered source available and inform recipients how to obtain it. Before hosting a build, provide a link to the actual published source revision; no public repository URL is established yet.
+The public source is available at https://github.com/chykoushik/TrialLens-TNBC and linked from the application footer. When distributing compiled frontend code or a container, retain the license notices and identify the corresponding source revision.
 
 Third-party terms remain in `THIRD_PARTY_NOTICES.txt` and `third_party/licenses/`. Preserve React, React DOM, Scheduler, Vite and installed Python notices. NVIDIA model and Nebius service terms are separate; no weights, credentials or raw model responses are distributed. Registry attribution remains ClinicalTrials.gov / U.S. National Library of Medicine. No sponsor endorsement is implied.
 
-The [Nebius x NVIDIA Global AI Hackathon official rules](https://nebiusglobalaihackathon.devpost.com/rules) require an open-source repository and an NVIDIA model with qualifying Nebius runtime calls or Nebius AI Cloud execution. The optional API now supplies a public, independently configurable Token Factory request path, but the offline browser demo and mocked tests do not establish successful live runtime. Integration code and saved attempts must not be presented as clinical validation or a deployed Nebius application. Before publication/submission the owner must resolve licensing, ownership, approved live runtime verification, a working demo/test-build link and remaining submission materials.
+The optional operator API supports a configured Token Factory request, but the offline browser demo and mocked tests do not establish successful live provider execution. Integration code and saved attempts are not clinical validation or evidence of a deployed Nebius application.

@@ -104,7 +104,7 @@ def test_render_probes_readiness_without_auto_deploy():
     assert '\n    autoDeploy:' not in blueprint
 
 
-def test_public_license_is_complete_mpl_with_honest_ownership_status():
+def test_public_license_and_readme_links_are_consistent():
     import json
     root = Path(__file__).resolve().parents[2]
     text = (root/'LICENSE').read_text(encoding='utf-8')
@@ -115,4 +115,10 @@ def test_public_license_is_complete_mpl_with_honest_ownership_status():
     assert 'COPYRIGHT HOLDER - OWNER CONFIRMATION REQUIRED' not in text
     assert json.loads((root/'frontend/package.json').read_text())['license'] == 'MPL-2.0'
     assert json.loads((root/'frontend/package-lock.json').read_text())['packages']['']['license'] == 'MPL-2.0'
-    assert 'Publication remains blocked' in (root/'README.md').read_text(encoding='utf-8')
+    readme = (root/'README.md').read_text(encoding='utf-8')
+    assert 'MPL-2.0' in readme
+    assert 'https://github.com/chykoushik/TrialLens-TNBC.git' in readme
+    assert 'https://triallens-tnbc.onrender.com/' in readme
+    assert 'Clinical eligibility remains unvalidated.' in readme
+    assert 'No public repository URL is verified yet' not in readme
+    assert 'There is no verified hosted URL' not in readme
