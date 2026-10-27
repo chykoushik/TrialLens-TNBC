@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: triallens-tnbc-public
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/readiness
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: TRIALLENS_LIVE_INFERENCE
+        value: "0"
+      - key: NEBIUS_LIVE_EXTRACTION
+        value: "0"

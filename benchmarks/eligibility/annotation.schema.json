@@ -1,0 +1,390 @@
+{
+  "$defs": {
+    "Label_Literal__inclusion____exclusion___": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Quote"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "enum": [
+                "inclusion",
+                "exclusion"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "Label[Literal['inclusion', 'exclusion']]",
+      "type": "object"
+    },
+    "Label_Logic_": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Quote"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Label[Logic]",
+      "type": "object"
+    },
+    "Label_bool_": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Quote"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "Label[bool]",
+      "type": "object"
+    },
+    "Label_list_str__": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Quote"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "Label[list[str]]",
+      "type": "object"
+    },
+    "Label_str_": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Quote"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "Label[str]",
+      "type": "object"
+    },
+    "Logic": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/Logic"
+          },
+          "title": "Children",
+          "type": "array"
+        },
+        "operator": {
+          "enum": [
+            "AND",
+            "OR",
+            "NONE"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/Span"
+        }
+      },
+      "required": [
+        "operator",
+        "span"
+      ],
+      "title": "Logic",
+      "type": "object"
+    },
+    "Quote": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "$ref": "#/$defs/Span"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "span",
+        "text"
+      ],
+      "title": "Quote",
+      "type": "object"
+    },
+    "ReferenceCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "assay": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "biomarker": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "boundary_review": {
+          "$ref": "#/$defs/Review"
+        },
+        "cohort": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/ReferenceCriterion"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "exceptions": {
+          "$ref": "#/$defs/Label_list_str__"
+        },
+        "logic": {
+          "$ref": "#/$defs/Label_Logic_"
+        },
+        "original": {
+          "$ref": "#/$defs/Quote"
+        },
+        "polarity": {
+          "$ref": "#/$defs/Label_Literal__inclusion____exclusion___"
+        },
+        "reference_id": {
+          "minLength": 1,
+          "title": "Reference Id",
+          "type": "string"
+        },
+        "temporal_constraint": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "threshold_operator": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "threshold_value": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "unit": {
+          "$ref": "#/$defs/Label_str_"
+        },
+        "unsupported_semantics": {
+          "$ref": "#/$defs/Label_bool_"
+        }
+      },
+      "required": [
+        "reference_id",
+        "original"
+      ],
+      "title": "ReferenceCriterion",
+      "type": "object"
+    },
+    "Review": {
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "status": {
+          "default": "unreviewed",
+          "enum": [
+            "unreviewed",
+            "uncertain",
+            "reviewed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "Review",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "exclusiveMinimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "Span",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "annotation_origin": {
+      "default": "manual",
+      "enum": [
+        "manual",
+        "software_test_fixture"
+      ],
+      "title": "Annotation Origin",
+      "type": "string"
+    },
+    "annotation_revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Annotation Revision",
+      "type": "integer"
+    },
+    "annotation_version": {
+      "const": "eligibility-reference-v1",
+      "default": "eligibility-reference-v1",
+      "title": "Annotation Version",
+      "type": "string"
+    },
+    "criteria": {
+      "items": {
+        "$ref": "#/$defs/ReferenceCriterion"
+      },
+      "title": "Criteria",
+      "type": "array"
+    },
+    "inventory_review": {
+      "$ref": "#/$defs/Review"
+    },
+    "nct_id": {
+      "pattern": "^NCT\\d{8}$",
+      "title": "Nct Id",
+      "type": "string"
+    },
+    "snapshot_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Snapshot Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "nct_id",
+    "snapshot_sha256"
+  ],
+  "title": "ReferenceAnnotation",
+  "type": "object"
+}

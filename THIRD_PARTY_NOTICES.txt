@@ -1,0 +1,29 @@
+TrialLens-TNBC third-party notices
+
+Project-owned source is licensed under Mozilla Public License 2.0; see LICENSE.
+Third-party materials retain their original licenses and copyright notices.
+The license selection is approved; ownership and contributor rights remain
+unconfirmed in the available records and must be confirmed before publication.
+
+React, React DOM and Scheduler use MIT licenses. Their original notices are in
+third_party/licenses/react.txt, react-dom.txt and scheduler.txt. Vite's license
+and third-party notice text is retained in third_party/licenses/vite.txt.
+The documented build copies these notices into the served assets/licenses path.
+
+Python and npm dependencies retain their respective installed license files.
+The dependency set includes licenses other than MIT, including MPL-2.0 for
+Certifi. No Certifi source has been modified. Preserve installed package notices;
+do not redistribute dependency caches or node_modules as project source.
+
+The controlled integration names NVIDIA nvidia/nemotron-3-super-120b-a12b through
+Nebius Token Factory. No model weights, raw provider responses or credentials
+are included. NVIDIA model and Nebius service terms are separate from the code
+license. The public fictional demo does not call those services. No endorsement
+by NVIDIA or Nebius is implied.
+
+The application attributes registry sources to ClinicalTrials.gov, operated by
+the U.S. National Library of Medicine, and links the original study pages.
+Raw registry snapshots are not distributed. Interactive patient cases,
+protocol examples and possible report outcomes are authored fictional examples,
+not real patient data or clinical validation. Curated extraction diagnostics
+remain explicitly validation-failed and unreviewed.

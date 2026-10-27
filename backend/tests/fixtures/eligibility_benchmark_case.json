@@ -1,0 +1,559 @@
+{
+  "purpose": "Independently authored software-test fixture. Fictional protocol; not clinician-validated reference or benchmark performance.",
+  "text": "Inclusion Criteria:\n* Cohort A: Hemoglobin >= 9 g/dL within 7 days\n* marker X positive AND (marker Y positive OR marker Z positive)\nExclusion Criteria:\n* Active infection unless controlled",
+  "gold_criteria": [
+    {
+      "reference_id": "ref-hemoglobin",
+      "boundary_review": {
+        "status": "reviewed",
+        "reviewer": "software-fixture-author",
+        "reviewed_at": "2026-10-24T00:00:00Z",
+        "note": "Software test only; not clinician review."
+      },
+      "original": {
+        "text": "* Cohort A: Hemoglobin >= 9 g/dL within 7 days",
+        "span": {
+          "start": 20,
+          "end": 66
+        }
+      },
+      "polarity": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "inclusion",
+        "evidence": [
+          {
+            "text": "Inclusion Criteria:",
+            "span": {
+              "start": 0,
+              "end": 19
+            }
+          }
+        ]
+      },
+      "threshold_operator": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": ">=",
+        "evidence": [
+          {
+            "text": ">=",
+            "span": {
+              "start": 43,
+              "end": 45
+            }
+          }
+        ]
+      },
+      "threshold_value": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "9",
+        "evidence": [
+          {
+            "text": "9",
+            "span": {
+              "start": 46,
+              "end": 47
+            }
+          }
+        ]
+      },
+      "unit": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "g/dL",
+        "evidence": [
+          {
+            "text": "g/dL",
+            "span": {
+              "start": 48,
+              "end": 52
+            }
+          }
+        ]
+      },
+      "temporal_constraint": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "within 7 days",
+        "evidence": [
+          {
+            "text": "within 7 days",
+            "span": {
+              "start": 53,
+              "end": 66
+            }
+          }
+        ]
+      },
+      "cohort": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "Cohort A",
+        "evidence": [
+          {
+            "text": "Cohort A",
+            "span": {
+              "start": 22,
+              "end": 30
+            }
+          }
+        ]
+      }
+    },
+    {
+      "reference_id": "ref-markers",
+      "boundary_review": {
+        "status": "reviewed",
+        "reviewer": "software-fixture-author",
+        "reviewed_at": "2026-10-24T00:00:00Z",
+        "note": "Software test only; not clinician review."
+      },
+      "original": {
+        "text": "* marker X positive AND (marker Y positive OR marker Z positive)",
+        "span": {
+          "start": 67,
+          "end": 131
+        }
+      },
+      "polarity": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "inclusion",
+        "evidence": [
+          {
+            "text": "Inclusion Criteria:",
+            "span": {
+              "start": 0,
+              "end": 19
+            }
+          }
+        ]
+      },
+      "logic": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": {
+          "operator": "AND",
+          "span": {
+            "start": 67,
+            "end": 131
+          },
+          "children": [
+            {
+              "operator": "NONE",
+              "span": {
+                "start": 69,
+                "end": 86
+              },
+              "children": []
+            },
+            {
+              "operator": "OR",
+              "span": {
+                "start": 92,
+                "end": 130
+              },
+              "children": [
+                {
+                  "operator": "NONE",
+                  "span": {
+                    "start": 92,
+                    "end": 109
+                  },
+                  "children": []
+                },
+                {
+                  "operator": "NONE",
+                  "span": {
+                    "start": 113,
+                    "end": 130
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        "evidence": [
+          {
+            "text": "* marker X positive AND (marker Y positive OR marker Z positive)",
+            "span": {
+              "start": 67,
+              "end": 131
+            }
+          }
+        ]
+      }
+    },
+    {
+      "reference_id": "ref-infection",
+      "boundary_review": {
+        "status": "reviewed",
+        "reviewer": "software-fixture-author",
+        "reviewed_at": "2026-10-24T00:00:00Z",
+        "note": "Software test only; not clinician review."
+      },
+      "original": {
+        "text": "* Active infection unless controlled",
+        "span": {
+          "start": 152,
+          "end": 188
+        }
+      },
+      "polarity": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": "exclusion",
+        "evidence": [
+          {
+            "text": "Exclusion Criteria:",
+            "span": {
+              "start": 132,
+              "end": 151
+            }
+          }
+        ]
+      },
+      "exceptions": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": [
+          "unless controlled"
+        ],
+        "evidence": [
+          {
+            "text": "unless controlled",
+            "span": {
+              "start": 171,
+              "end": 188
+            }
+          }
+        ]
+      },
+      "unsupported_semantics": {
+        "review": {
+          "status": "reviewed",
+          "reviewer": "software-fixture-author",
+          "reviewed_at": "2026-10-24T00:00:00Z",
+          "note": "Software test only; not clinician review."
+        },
+        "value": true,
+        "evidence": [
+          {
+            "text": "unless controlled",
+            "span": {
+              "start": 171,
+              "end": 188
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "inventory_review": {
+    "status": "reviewed",
+    "reviewer": "software-fixture-author",
+    "reviewed_at": "2026-10-24T00:00:00Z",
+    "note": "Software test only; not clinician review."
+  },
+  "prediction": {
+    "criteria": [
+      {
+        "criterion_id": "hemoglobin",
+        "original_text": "* Cohort A: Hemoglobin >= 9 g/dL within 7 days",
+        "criterion_type": "inclusion",
+        "cohort": "Cohort A",
+        "logical_operator": "NONE",
+        "dependencies": null,
+        "biomarker": null,
+        "assay": null,
+        "comparator": ">=",
+        "threshold": "8",
+        "unit": "g/dL",
+        "temporal_constraint": "within 7 days"
+      },
+      {
+        "criterion_id": "markers",
+        "original_text": "* marker X positive AND (marker Y positive OR marker Z positive)",
+        "criterion_type": "inclusion",
+        "cohort": null,
+        "logical_operator": "OR",
+        "dependencies": [
+          {
+            "criterion_id": "x",
+            "original_text": "marker X positive",
+            "criterion_type": "inclusion",
+            "cohort": null,
+            "logical_operator": "NONE",
+            "dependencies": null,
+            "biomarker": null,
+            "assay": null,
+            "comparator": null,
+            "threshold": null,
+            "unit": null,
+            "temporal_constraint": null
+          },
+          {
+            "criterion_id": "yz",
+            "original_text": "marker Y positive OR marker Z positive",
+            "criterion_type": "inclusion",
+            "cohort": null,
+            "logical_operator": "OR",
+            "dependencies": [
+              {
+                "criterion_id": "y",
+                "original_text": "marker Y positive",
+                "criterion_type": "inclusion",
+                "cohort": null,
+                "logical_operator": "NONE",
+                "dependencies": null,
+                "biomarker": null,
+                "assay": null,
+                "comparator": null,
+                "threshold": null,
+                "unit": null,
+                "temporal_constraint": null
+              },
+              {
+                "criterion_id": "z",
+                "original_text": "marker Z positive",
+                "criterion_type": "inclusion",
+                "cohort": null,
+                "logical_operator": "NONE",
+                "dependencies": null,
+                "biomarker": null,
+                "assay": null,
+                "comparator": null,
+                "threshold": null,
+                "unit": null,
+                "temporal_constraint": null
+              }
+            ],
+            "biomarker": null,
+            "assay": null,
+            "comparator": null,
+            "threshold": null,
+            "unit": null,
+            "temporal_constraint": null
+          }
+        ],
+        "biomarker": null,
+        "assay": null,
+        "comparator": null,
+        "threshold": null,
+        "unit": null,
+        "temporal_constraint": null
+      },
+      {
+        "criterion_id": "infection",
+        "original_text": "* Active infection unless controlled",
+        "criterion_type": "inclusion",
+        "cohort": null,
+        "logical_operator": "NONE",
+        "dependencies": null,
+        "biomarker": null,
+        "assay": null,
+        "comparator": null,
+        "threshold": null,
+        "unit": null,
+        "temporal_constraint": null
+      },
+      {
+        "criterion_id": "extra",
+        "original_text": "Invented criterion",
+        "criterion_type": "inclusion",
+        "cohort": null,
+        "logical_operator": "NONE",
+        "dependencies": null,
+        "biomarker": null,
+        "assay": null,
+        "comparator": null,
+        "threshold": null,
+        "unit": null,
+        "temporal_constraint": null
+      }
+    ],
+    "evidence": [
+      {
+        "criterion_id": "hemoglobin",
+        "original_span": {
+          "start": 20,
+          "end": 66
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {
+          "cohort": {
+            "start": 22,
+            "end": 30
+          },
+          "comparator": {
+            "start": 43,
+            "end": 45
+          },
+          "threshold": {
+            "start": 46,
+            "end": 47
+          },
+          "unit": {
+            "start": 48,
+            "end": 52
+          },
+          "temporal_constraint": {
+            "start": 53,
+            "end": 66
+          }
+        }
+      },
+      {
+        "criterion_id": "markers",
+        "original_span": {
+          "start": 67,
+          "end": 131
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "x",
+        "original_span": {
+          "start": 69,
+          "end": 86
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "yz",
+        "original_span": {
+          "start": 92,
+          "end": 130
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "y",
+        "original_span": {
+          "start": 92,
+          "end": 109
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "z",
+        "original_span": {
+          "start": 113,
+          "end": 130
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "infection",
+        "original_span": {
+          "start": 152,
+          "end": 188
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      },
+      {
+        "criterion_id": "extra",
+        "original_span": {
+          "start": 0,
+          "end": 1
+        },
+        "polarity_span": {
+          "start": 0,
+          "end": 19
+        },
+        "fields": {}
+      }
+    ]
+  },
+  "expected": {
+    "tp": 3,
+    "fp": 1,
+    "fn": 0,
+    "polarity_correct": 2,
+    "polarity_evaluated": 3,
+    "threshold_value_correct": 0,
+    "threshold_value_evaluated": 1,
+    "unit_correct": 1,
+    "unit_evaluated": 1,
+    "logic_correct": 0,
+    "logic_evaluated": 1,
+    "exceptions_correct": 0,
+    "exceptions_evaluated": 1,
+    "unsupported_predictions": 1,
+    "unsupported_evaluated": 1,
+    "span_valid": 5,
+    "span_evaluated": 8,
+    "validation_passed": 0,
+    "validation_evaluated": 1
+  }
+}

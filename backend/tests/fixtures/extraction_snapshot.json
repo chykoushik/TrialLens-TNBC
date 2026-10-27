@@ -1,0 +1,16 @@
+{
+  "is_synthetic": true,
+  "description": "SYNTHETIC TEST ONLY: fictional NCT ID and criteria; no clinical evidence.",
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT00000001"
+        },
+        "eligibilityModule": {
+          "eligibilityCriteria": "Inclusion Criteria:\nCohort A: marker A present AND (assay B >= 10 units within 7 days OR assay C positive)\nExclusion Criteria:\ncondition D present"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "is_synthetic": true,
+  "nct_id": null,
+  "original_text": "SYNTHETIC TEST ONLY. Inclusion: marker A present AND (assay B positive OR assay C positive). Exclusion: condition D present.",
+  "criteria": [
+    {
+      "criterion_id": "synthetic-inclusion",
+      "criterion_type": "inclusion",
+      "original_text": "marker A present AND (assay B positive OR assay C positive)",
+      "logical_operator": "AND",
+      "extraction_method": "manual synthetic example",
+      "dependencies": [
+        {
+          "criterion_id": "synthetic-marker-a",
+          "criterion_type": "inclusion",
+          "original_text": "marker A present",
+          "biomarker": "synthetic marker A",
+          "logical_operator": "NONE"
+        },
+        {
+          "criterion_id": "synthetic-assay-choice",
+          "criterion_type": "inclusion",
+          "original_text": "assay B positive OR assay C positive",
+          "logical_operator": "OR",
+          "dependencies": [
+            {
+              "criterion_id": "synthetic-assay-b",
+              "criterion_type": "inclusion",
+              "original_text": "assay B positive",
+              "assay": "synthetic assay B",
+              "logical_operator": "NONE"
+            },
+            {
+              "criterion_id": "synthetic-assay-c",
+              "criterion_type": "inclusion",
+              "original_text": "assay C positive",
+              "assay": "synthetic assay C",
+              "logical_operator": "NONE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "criterion_id": "synthetic-exclusion",
+      "criterion_type": "exclusion",
+      "original_text": "condition D present",
+      "logical_operator": "NONE",
+      "extraction_method": "manual synthetic example"
+    }
+  ]
+}

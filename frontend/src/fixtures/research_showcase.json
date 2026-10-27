@@ -1,0 +1,10 @@
+{
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "evidence_entries": 24,
+  "automatically_recovered": 5,
+  "remaining_entries": 19,
+  "validation_errors": 39,
+  "status": "validation_failed",
+  "human_review_required": true,
+  "validated_output": null
+}
