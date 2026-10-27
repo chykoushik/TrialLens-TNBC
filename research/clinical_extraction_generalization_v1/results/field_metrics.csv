@@ -1,0 +1,16 @@
+method,field,known_recovered,known_references,audited_supported,audited_accepted
+original,ER,5,6,9,11
+original,PR,4,6,8,12
+original,HER2,2,8,4,7
+v1,ER,6,6,13,15
+v1,PR,6,6,13,17
+v1,HER2,8,8,13,21
+v2_context,ER,6,6,13,15
+v2_context,PR,6,6,13,17
+v2_context,HER2,8,8,13,18
+corrected_context,ER,6,6,13,17
+corrected_context,PR,6,6,13,19
+corrected_context,HER2,8,8,13,18
+selective_verification,ER,5,6,10,14
+selective_verification,PR,5,6,10,16
+selective_verification,HER2,7,8,9,12

@@ -33,6 +33,13 @@ def test_public_inventory_excludes_internal_material():
         assert not public_release.eligible(name)
     assert public_release.eligible('.env.example')
     assert public_release.eligible('backend/app/extraction_prompt.py')
+    assert public_release.eligible('research/compiled_review_v1/belief.py')
+    assert public_release.eligible('research/clinical_extraction_generalization_v1/results/method_metrics.csv')
+    for name in ('research/real_bc_reports_v1/data/evidence.sqlite',
+                 'research/clinical_extraction_generalization_v1/data/cohort_private.json',
+                 'research/clinical_extraction_generalization_v1/results/patient_recovery.csv',
+                 'research/compiled_review_v1/bench.py', 'results/recomb/manuscript.html'):
+        assert not public_release.eligible(name)
     names = public_release.inventory()
     assert [name for name in names if name.endswith('.md')] == ['README.md']
     assert not public_release.audit(names)

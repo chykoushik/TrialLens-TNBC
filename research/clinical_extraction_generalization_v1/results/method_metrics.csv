@@ -1,0 +1,6 @@
+method,known_recovered,known_references,known_value_present,primary_patients,audited_supported,audited_accepted,audited_unsupported,audited_precision,audited_emitting_patients,categorical_accepted_100,categorical_candidates_100,categorical_withheld_100,report_field_coverage_100,patients_with_categorical_output,candidate_abstention_rate,text_span_aligned_100,clinical_contradiction_rate
+original,11,20,11,8,21,30,9,0.7,8,121,121,0,0.22666666666666666,30,0.0,121,
+v1,20,20,20,8,39,53,14,0.7358490566037735,13,190,199,9,0.37,51,0.04522613065326633,190,
+v2_context,20,20,20,8,39,50,11,0.78,12,182,199,17,0.36333333333333334,49,0.08542713567839195,182,
+corrected_context,20,20,20,8,39,54,15,0.7222222222222222,12,198,215,17,0.36333333333333334,49,0.07906976744186046,198,
+selective_verification,17,20,17,8,29,42,13,0.6904761904761905,10,145,215,70,0.28,36,0.32558139534883723,145,

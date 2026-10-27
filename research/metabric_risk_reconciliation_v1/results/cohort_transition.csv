@@ -1,0 +1,4 @@
+original,concordant_tnbc,discordant_potential_tnbc,non_tnbc,unresolved
+confirmed_tnbc,269,51,0,0
+non_tnbc,0,18,1961,0
+unknown_receptors,0,0,0,210

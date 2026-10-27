@@ -1,0 +1,7 @@
+before,after,change,assertions,supported,unsupported
+v1,v2_context,added,0,0,0
+v1,v2_context,removed,3,0,3
+v2_context,corrected_context,added,4,0,4
+v2_context,corrected_context,removed,0,0,0
+corrected_context,selective_verification,added,0,0,0
+corrected_context,selective_verification,removed,12,10,2

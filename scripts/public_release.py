@@ -1,4 +1,5 @@
 import argparse
+import csv
 import hashlib
 import json
 import re
@@ -16,6 +17,36 @@ PRIVATE_TESTS = {'test_recomb_evaluation.py', 'test_prioritization_followup.py',
 FRONTEND = {'package.json', 'package-lock.json', 'index.html', 'tsconfig.json', 'vite.config.ts', 'playwright.config.mjs'}
 MARKERS = {'cache/.gitkeep', 'data/raw/.gitkeep', 'data/synthetic/.gitkeep', 'data/processed/.gitkeep', 'results/.gitkeep'}
 FIXTURES = {'synthetic_criteria.json', 'extraction_snapshot.json', 'extraction_mock.json', 'eligibility_benchmark_case.json'}
+RESEARCH_CODE = {
+    'research/requirements.txt', 'research/synthetic.py', 'research/test_results.py',
+    'research/decision_review_v1/model.py', 'research/decision_review_v1/test_model.py',
+    'research/constrained_review_v1/solver.py', 'research/constrained_review_v1/factorized.py',
+    'research/constrained_review_v1/test_solver.py', 'research/constrained_review_v1/test_factorized.py',
+    'research/constrained_review_v1/test_certificates.py',
+    'research/compiled_review_v1/belief.py', 'research/compiled_review_v1/test_belief.py',
+    'research/compiled_review_v1/test_limits.py',
+    'research/certified_review_v1/belief.py', 'research/certified_review_v1/certificate.py',
+    'research/certified_review_v1/policy.py', 'research/certified_review_v1/test_methods.py',
+}
+AGGREGATES = {
+    'results/recomb/20261026-compiled-review-v2/benchmark_summary.csv',
+    'results/recomb/20261026-compiled-review-v2/paired_effects.csv',
+    'results/recomb/20261026-certified-review-v1/comparison.csv',
+    'results/recomb/20261026-certified-review-v1/paired_effects.csv',
+    'research/metabric_realdata_v1/results/main_table.csv',
+    'research/metabric_risk_reconciliation_v1/results/cohort_transition.csv',
+    'research/metabric_risk_reconciliation_v1/results/budget_error_tradeoffs.csv',
+    'research/metabric_risk_reconciliation_v1/results/paired_statistics.csv',
+    'research/matched_coverage_v1/results/primary_table.csv',
+    'research/matched_coverage_v1/results/primary_statistics.csv',
+    'research/clinical_validation_v1/results/primary_operating_points.csv',
+    'research/clinical_validation_v1/results/primary_statistics.csv',
+    'research/clinical_extraction_generalization_v1/results/method_metrics.csv',
+    'research/clinical_extraction_generalization_v1/results/confidence_intervals.csv',
+    'research/clinical_extraction_generalization_v1/results/withholding.csv',
+    'research/clinical_extraction_generalization_v1/results/field_metrics.csv',
+    'research/clinical_extraction_generalization_v1/results/component_transitions.csv',
+}
 PATTERNS = {
     'private_key': r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
     'provider_token': r'\b(?:ghp_|github_pat_|sk-)[A-Za-z0-9_-]{24,}\b',
@@ -34,6 +65,8 @@ def eligible(name):
         return False
     if path.suffix.lower() in {'.md', '.markdown', '.pdf', '.zip', '.log', '.claim', '.key', '.pem'}:
         return value == 'README.md'
+    if value in RESEARCH_CODE | AGGREGATES:
+        return True
     if value in TOP | MARKERS | {'scripts/public_release.py', 'benchmarks/eligibility/annotation.schema.json'}:
         return True
     if path.parent.as_posix() == 'backend' and path.name in HELPERS:
@@ -58,13 +91,14 @@ def eligible(name):
 
 def inventory():
     candidates = [ROOT/p for p in TOP | MARKERS]
+    candidates.extend(ROOT/p for p in RESEARCH_CODE | AGGREGATES)
     for folder in ('backend', 'frontend/src', 'frontend/e2e', 'third_party/licenses', 'assets/screenshots'):
         candidates.extend((ROOT/folder).rglob('*'))
     candidates.extend(ROOT/'frontend'/p for p in FRONTEND)
     candidates.extend([Path(__file__), ROOT/'benchmarks/eligibility/annotation.schema.json'])
     paths = sorted({p.relative_to(ROOT).as_posix() for p in candidates
                     if p.is_file() and not p.is_symlink() and eligible(p.relative_to(ROOT))})
-    missing = [p for p in TOP | MARKERS if not (ROOT/p).is_file()]
+    missing = [p for p in TOP | MARKERS | RESEARCH_CODE | AGGREGATES if not (ROOT/p).is_file()]
     if missing:
         raise FileNotFoundError(', '.join(sorted(missing)))
     return paths
@@ -77,6 +111,11 @@ def audit(paths):
         if path.suffix == '.png':
             continue
         text = path.read_text(encoding='utf-8')
+        if name in AGGREGATES:
+            fields = set(next(csv.reader(text.splitlines()), []))
+            private_fields = {'patient_id', 'patient_key', 'study_id', 'report_id', 'source_quote', 'raw_text', 'image_path', 'pdf_path'}
+            if fields & private_fields or re.search(r'\bTCGA-[A-Z0-9]{2}-[A-Z0-9]{4}\b|\bMB-\d{4,}\b', text):
+                findings.append(dict(path=name, category='patient_level_content'))
         if name in MARKERS and text.strip():
             raise ValueError(f'Nonempty marker: {name}')
         for category, pattern in PATTERNS.items():
@@ -84,9 +123,9 @@ def audit(paths):
                 continue
             for match in re.finditer(pattern, text, re.I if category == 'personal_path' else 0):
                 findings.append(dict(path=name, category=category, line=text.count('\n', 0, match.start())+1))
-    assert [p for p in paths if p.lower().endswith('.md')] == ['README.md']
     if findings:
         raise ValueError(json.dumps(findings))
+    assert [p for p in paths if p.lower().endswith('.md')] == ['README.md']
     return findings
 
 
@@ -97,7 +136,7 @@ def main():
     paths = inventory()
     audit(paths)
     report = dict(retained_files=len(paths), files={p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths},
-                  excluded=['AGENTS.md and internal prompts', 'docs/', 'research/', 'results/ except empty marker',
+                  excluded=['AGENTS.md and internal prompts', 'docs/', 'research and results outside the explicit allowlist',
                             'data/ except empty markers', 'cache/ except empty marker', 'logs/', 'models/',
                             'figures/', 'scripts/paper_figures/', 'archives, PDFs, private Markdown and credentials',
                             'historical experiment-only CLI/tests', 'virtual environments, node_modules and build outputs'],

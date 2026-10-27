@@ -14,7 +14,7 @@ The demo evaluates authored fictional evidence against fictional protocol clause
 
 There are two operating modes. **Offline mode is the default:** the browser uses deterministic fictional calculations without credentials. **Optional live mode** adds an authenticated operator HTTP workflow that sends the bundled fictional protocol to NVIDIA Nemotron on Nebius Token Factory. Live results are returned separately and never update the fictional cases. The browser demo has no provider-key input and does not initiate live inference.
 
-The source also contains a controlled local workspace for registry browsing, strict extraction validation and annotation. Saved sources, provider responses, research outputs and private annotations are not distributed; optional source views can be empty in a clean checkout.
+The source also contains a controlled local workspace for registry browsing, strict extraction validation and annotation. Medical source files, provider responses and private annotations are not distributed; optional source views can be empty in a clean checkout. Selected research modules and aggregate results are included separately below.
 
 ## Key features
 
@@ -38,7 +38,25 @@ Research Tools distinguishes failed model extraction from accepted source eviden
 
 ## Research results and scope
 
-The public application is a fictional demonstration with symbolic assessment and review planning. The separate research implementation evaluates probabilistic policies, compiled belief inference and interval certification. That implementation, its datasets and its experiment artifacts are not distributed here. The research experiments are not reproducible from this checkout; the installation and tests below cover the public application.
+The public application is a fictional demonstration with symbolic assessment and review planning. The separate research implementation evaluates probabilistic policies, compiled belief inference and interval certification. This repository includes its numerical core, independent synthetic tests and selected aggregate result snapshots. They do not change the demo or establish clinical eligibility accuracy.
+
+The numerical modules use only the Python standard library:
+
+- [Probabilistic model](research/decision_review_v1/model.py) and [constrained policy optimization](research/constrained_review_v1/solver.py), with the [analytical reference](research/constrained_review_v1/factorized.py).
+- [Compiled belief inference](research/compiled_review_v1/belief.py) and [reusable belief caches](research/certified_review_v1/belief.py).
+- [Continuous rational certification](research/certified_review_v1/certificate.py) and [abstention repair](research/certified_review_v1/policy.py).
+
+The six numerical core files preserve the validated implementation. `research/synthetic.py` extracts the original deterministic case generators, and `policy.py` extracts the original repair function, without importing the experiment/report drivers. Tests compare inference against independent enumerated references, check constrained optima and verify the interior-risk counterexample. The rational certifier supports at most eight latent Boolean facts and only its specified observation law; it is not a general clinical uncertainty bound.
+
+For research-only testing, use Python 3.12 and the pinned pytest dependency; no application packages, patient data, model weights or API credentials are required:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r research/requirements.txt
+.\.venv\Scripts\python.exe -B -m pytest research -q --basetemp=cache/pytest-research -p no:cacheprovider
+```
+
+These tests validate the numerical implementation and internal consistency of saved aggregates. They do not rerun the full historical benchmarks or reconstruct clinical inputs. METABRIC and pathology experiments cannot be reproduced fully from this checkout: patient-level inputs, source images, transcriptions, private adapters and the full experiment drivers are not included.
 
 Completed studies support the following limited findings:
 
@@ -65,7 +83,19 @@ The extraction generalization study processed an internal holdout of **100 patie
 
 Context filtering removed three unsupported assertions without losing supported assertions in the audited subset. Joint correction passed all 44 software controls but added four unsupported definition spans on new cases. Selective verification withheld ten supported assertions. Patient-bootstrap precision intervals were wide: 65.9%-94.1% for v2 context filtering and 55.8%-94.1% for joint correction. Perfect recovery of 20 known findings is not whole-document recall or evidence of population-perfect performance. Image-assisted transcription results were evaluated separately and are not automatic OCR capability.
 
-The source study identifiers are `20261026-compiled-review-v2`, `20261026-certified-review-v1`, `metabric_realdata_v1`, `metabric_risk_reconciliation_v1`, `matched_coverage_v1`, `clinical_validation_v1`, `real_bc_reports_v1` and `clinical_extraction_generalization_v1`. The reported values come from their saved benchmark checks, paired statistics, source inventories and extraction metrics; those local artifacts are not bundled with the demo. The retrospective Nemotron attempt shown in Research Showcase is a separate extraction-validation example, not these pathology benchmark results.
+Selected snapshots retain their original study paths:
+
+| Results | Published files and scope |
+|---|---|
+| [Compiled synthetic benchmark](results/recomb/20261026-compiled-review-v2) | `benchmark_summary.csv`, `paired_effects.csv`: isolated configuration timings and synthetic-seed paired effects. The original 96-condition study is separate from the later 48-condition certification study. |
+| [Continuous certification](results/recomb/20261026-certified-review-v1) | `comparison.csv`, `paired_effects.csv`: final and out-of-model synthetic results only; development/validation rows are omitted from `comparison.csv`. Budgets within an instance are correlated. |
+| [METABRIC primary comparison](research/metabric_realdata_v1/results/main_table.csv) | All four archival fields initially hidden, budget two, 1,021 evaluation patients and two shared-field rule proxies. Error and coverage use all proxy opportunities, not answered cases only. |
+| [Risk and receptor reconciliation](research/metabric_risk_reconciliation_v1/results) | `cohort_transition.csv`, `budget_error_tradeoffs.csv`, `paired_statistics.csv`: cohort counts, assumed-channel tradeoffs and the complete 1,848-comparison Holm family. Highlighted grid examples remain exploratory. |
+| [Confidence-based coverage comparison](research/matched_coverage_v1/results) | `primary_table.csv`, `primary_statistics.csv`: 48 planned contrasts including nine unattainable slots with missing test results. The failed requested-target matching gate is retained. |
+| [Quota selection control](research/clinical_validation_v1/results) | `primary_operating_points.csv`, `primary_statistics.csv`: 60 contrasts on the same 1,021 evaluation patients, with a different shared-MAP/quota decoder. Integrated observation vectors and quota permutations are not extra patients. |
+| [Extraction generalization](research/clinical_extraction_generalization_v1/results) | `method_metrics.csv`, `confidence_intervals.csv`, `withholding.csv`, `field_metrics.csv`, `component_transitions.csv`: limited reference recovery, audited precision, abstention and adverse joint-rule results with their separate denominators. |
+
+The CSVs are saved aggregate evidence, not a new experiment or independently adjudicated clinical data. Integrity tests pin the snapshots and recompute the published Holm adjustments and consistency relationships. The retrospective Nemotron attempt shown in Research Showcase is a separate extraction-validation example, not these pathology benchmark results. The authentic pathology source inventory remains private.
 
 Clinical eligibility remains unvalidated. Independent adjudication, dated patient-linked records, calibrated observation models, measured review effort and external validation are still required. Exact source offsets and passing software tests do not prove clinical interpretation or safety.
 
