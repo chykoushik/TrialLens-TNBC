@@ -21,7 +21,7 @@ from scripts.public_release import ROOT, runtime_files
 client = TestClient(app)
 
 
-def test_public_routes_are_isolated_even_if_environment_enables_byok(monkeypatch, caplog):
+def test_public_routes_enable_only_visitor_inference(monkeypatch, caplog):
     monkeypatch.setenv('TRIALLENS_BYOK_ENABLED', '1')
     monkeypatch.setenv('NEBIUS_API_KEY', 'owner-account-never-use')
     async def forbidden(*args, **kwargs):
@@ -29,10 +29,10 @@ def test_public_routes_are_isolated_even_if_environment_enables_byok(monkeypatch
     monkeypatch.setattr(visitor, 'provider', forbidden)
     sentinel = 'non-secret-infrastructure-test'
     for prefix in ('', '/api'):
-        assert client.get(prefix + '/health').json()['visitor_extraction_enabled'] is False
+        assert client.get(prefix + '/health').json()['visitor_extraction_enabled'] is True
         for route in ('/visitor-analysis/prepare', '/visitor-analysis/run'):
             response = client.post(prefix + route, json={'api_key': sentinel}, headers={'X-Forwarded-Proto': 'https'})
-            assert response.status_code == 503 and sentinel not in response.text
+            assert response.status_code == 422 and sentinel not in response.text
             assert response.headers['Cache-Control'] == 'no-store'
         for route in ('/operator/session', '/saved-trials/configuration', '/annotations/NCT04331067', '/openapi.json', '/docs',
                       '/results/nebius/live-request.claim', '/results/extraction/example/raw_response.json', '/.env'):
@@ -91,7 +91,7 @@ from fastapi.testclient import TestClient
 with TestClient(app) as c:
     assert c.get('/').status_code==200
     assert c.get('/api/readiness').status_code==200
-    assert c.get('/api/health').json()['visitor_extraction_enabled'] is False
+    assert c.get('/api/health').json()['visitor_extraction_enabled'] is True
     trial=c.get('/api/clinical-trials/search',params={'nct_id':'NCT04331067'}).json()['trials'][0]
     r=c.get('/api/clinical-trials/NCT04331067/analysis',params={k:trial[k] for k in ('snapshot','snapshot_sha256')})
     assert r.status_code==200 and not r.json()['inference']['request_sent']
@@ -104,7 +104,7 @@ with TestClient(app) as c:
     result=c.post('/api/research/planner/evaluate',json={'scenario':scenario,'budget':1})
     assert result.status_code==200 and result.json()['bdd_nodes']>2
     assert c.get('/api/operator/session').status_code==404
-    assert c.post('/api/visitor-analysis/run',json={'api_key':'non-secret-isolation-fixture'}).status_code==503
+    assert c.post('/api/visitor-analysis/run',json={'api_key':'non-secret-isolation-fixture'}).status_code==422
 print('Isolated runtime passed')
 '''
     environment = {'SystemRoot': os.environ.get('SystemRoot', 'C:/Windows'), 'TEMP': str(tmp_path), 'TMP': str(tmp_path),
@@ -119,11 +119,11 @@ def test_render_and_container_configuration_are_consistent():
     docker = (ROOT / 'Dockerfile').read_text()
     render = (ROOT / 'render.yaml').read_text()
     assert 'ENV VITE_PUBLIC_RESEARCH=1' in docker and 'ENV VITE_PUBLIC_DEMO=0' in docker
-    assert 'ENV TRIALLENS_BYOK_ENABLED=0' in docker
+    assert 'ENV TRIALLENS_BYOK_ENABLED=1' in docker
     assert 'COPY data/raw/trials/' in docker and 'COPY research/' in docker and 'COPY results/' in docker
     assert 'USER demo' in docker and 'python", "-B", "-m", "backend.serve_public' in docker
     assert 'healthCheckPath: /api/readiness' in render and 'autoDeployTrigger: "off"' in render
-    assert 'key: TRIALLENS_BYOK_ENABLED\n        value: "0"' in render
+    assert 'key: TRIALLENS_BYOK_ENABLED\n        value: "1"' in render
     snapshots = [ROOT / name for name in runtime_files() if name.startswith('data/raw/trials/') and name.endswith('response.json')]
     assert len(snapshots) == 2
     for path in snapshots:
@@ -207,3 +207,44 @@ def test_actual_nct04331067_all_sections_merge_and_partial_failure(monkeypatch, 
             span = entry['original_span']
             assert source.text[span['start']:span['end']]
     assert 'Absolute neutrophil count' in ''.join(node['original_text'] for node in result['merged_criteria'])
+
+
+
+def test_public_search_prepare_approve_and_view_mocked_nvidia(monkeypatch):
+    visitor.plans.clear(); visitor.attempts.clear(); visitor.active.clear()
+    monkeypatch.setenv('TRIALLENS_BYOK_ENABLED', '1')
+    monkeypatch.setenv('NEBIUS_INPUT_USD_PER_MILLION', '0.30')
+    monkeypatch.setenv('NEBIUS_OUTPUT_USD_PER_MILLION', '0.90')
+    monkeypatch.setenv('NEBIUS_API_KEY', 'operator-must-never-be-used')
+    calls = []
+    async def provider(messages, key, disconnected):
+        assert key == 'public-visitor-software-fixture'
+        calls.append(1)
+        return section_fixture(messages)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    trial = client.get('/api/clinical-trials/search', params={'nct_id': 'NCT04331067'}).json()['trials'][0]
+    body = {k: trial[k] for k in ('nct_id', 'snapshot', 'snapshot_sha256')}
+    quote = client.post('/api/visitor-analysis/prepare', json=body)
+    assert quote.status_code == 200
+    value = quote.json()
+    assert value['request_count'] == 3
+    result = client.post('/api/visitor-analysis/run', json={
+        'analysis_id': value['analysis_id'], 'api_key': 'public-visitor-software-fixture',
+        'confirmed': True, 'maximum_cost_usd': value['maximum_cost_usd']})
+    assert result.status_code == 200
+    assert result.json()['full_source_coverage_validated']
+    assert len(calls) == 3
+    assert result.headers['Cache-Control'] == 'no-store'
+    assert 'public-visitor-software-fixture' not in result.text
+
+
+
+def test_public_unexpected_visitor_errors_never_log_credentials(monkeypatch, caplog):
+    monkeypatch.setenv('TRIALLENS_BYOK_ENABLED', '1')
+    def fail(*args):
+        raise RuntimeError('non-secret-exception-redaction-fixture')
+    monkeypatch.setattr(visitor, 'boundary', fail)
+    response = client.post('/api/visitor-analysis/remove', json={'analysis_id': 'a' * 64})
+    assert response.status_code == 500
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert 'non-secret-exception-redaction-fixture' not in response.text + caplog.text

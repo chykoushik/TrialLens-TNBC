@@ -42,11 +42,15 @@ async def public_headers(request, call_next):
         body = bytearray()
         async for chunk in request.stream():
             if len(body) + len(chunk) > 8192:
-                from starlette.responses import JSONResponse
                 return JSONResponse(status_code=413, content={"detail": "Request too large"})
             body.extend(chunk)
         request._body = bytes(body)
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        if '/visitor-analysis/' not in request.url.path:
+            raise
+        response = JSONResponse(status_code=500, content={"detail": "Visitor analysis failed; no automatic retry was made. Provider processing and billing may have occurred."})
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     if '/visitor-analysis/' in request.url.path:

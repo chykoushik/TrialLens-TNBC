@@ -25,6 +25,8 @@ lock = threading.Lock()
 plans = {}
 attempts = {}
 active = set()
+running = {}
+KEY_TTL = 300
 OUTPUT_LIMIT = 8192
 MAX_SECTIONS = 24
 TTL = 600
@@ -37,6 +39,11 @@ class Preparation(BaseModel):
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class Removal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    analysis_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class Approval(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     analysis_id: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -46,12 +53,15 @@ class Approval(BaseModel):
 
 
 def boundary(request):
-    if os.environ.get("TRIALLENS_BYOK_ENABLED") != "1" or os.environ.get("TRIALLENS_PUBLIC_RESEARCH") == "1":
+    if os.environ.get("TRIALLENS_BYOK_ENABLED") != "1":
         raise HTTPException(503, "Visitor extraction is disabled pending deployment security review.")
-    if request.url.scheme != "https" and request.client.host not in ("127.0.0.1", "::1", "testclient"):
+    render_https = (os.environ.get("RENDER") == "true" and request.headers.get("host") == os.environ.get("RENDER_EXTERNAL_HOSTNAME") and request.headers.get("x-forwarded-proto") == "https")
+    if not render_https and request.url.scheme != "https" and request.client.host not in ("127.0.0.1", "::1", "testclient"):
         raise HTTPException(400, "Visitor credentials require HTTPS.")
     origin = request.headers.get("origin")
     allowed = {str(request.base_url).rstrip("/")}
+    if render_https:
+        allowed.add("https://" + os.environ["RENDER_EXTERNAL_HOSTNAME"])
     allowed.update(os.environ.get("TRIALLENS_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","))
     if origin and origin not in allowed:
         raise HTTPException(403, "Untrusted request origin.")
@@ -147,6 +157,18 @@ def prepare(body: Preparation, request: Request):
     return quote
 
 
+@router.post("/remove")
+async def remove(body: Removal, request: Request):
+    boundary(request)
+    with lock:
+        plans.pop(body.analysis_id, None)
+        session = running.get(body.analysis_id)
+        if session:
+            session["cancel"].set()
+            session["task"].cancel()
+    return {"removed": True, "provider_key_revoked": False}
+
+
 async def provider(messages, key, disconnected):
     from backend.app.nebius import build_chat_payload, error_code
     config = NebiusConfig(key, DEFAULT_MODEL, BASE_URL)
@@ -182,7 +204,7 @@ async def extract(plan, key, disconnected):
     requests_sent = 0
     timestamp = datetime.now(timezone.utc).isoformat()
     for index, unit in enumerate(plan["units"]):
-        if disconnected.is_set():
+        if disconnected.is_set() or time.monotonic() >= plan.get("key_deadline", float("inf")):
             break
         try:
             requests_sent += 1
@@ -235,6 +257,7 @@ async def extract(plan, key, disconnected):
 @router.post("/run")
 async def run(body: Approval, request: Request):
     owner = boundary(request)
+    deadline = time.monotonic() + KEY_TTL
     key = body.api_key.get_secret_value().strip()
     body.api_key = SecretStr("")
     if not body.confirmed or not 8 <= len(key) <= 512 or any(c.isspace() for c in key) or not key.isascii():
@@ -251,20 +274,38 @@ async def run(body: Approval, request: Request):
         active.add(owner)
     disconnected = asyncio.Event()
     task = None
+    expiry = None
     try:
         source = select_source(plan["source"].nct_id, plan["snapshot"])
         if source.sha256 != plan["source"].sha256:
             raise HTTPException(409, "Source changed. Prepare a new analysis.")
+        plan["key_deadline"] = deadline
         task = asyncio.create_task(extract(plan, key, disconnected))
+        def expire():
+            disconnected.set()
+            task.cancel()
+        expiry = asyncio.get_running_loop().call_later(max(0, deadline - time.monotonic()), expire)
+        with lock:
+            running[body.analysis_id] = {"cancel": disconnected, "task": task}
         key = ""
         while not task.done():
+            if time.monotonic() >= deadline:
+                disconnected.set()
+                task.cancel()
+                raise HTTPException(408, "Temporary key expired; no additional requests will be sent. Provider processing and billing may have occurred.")
             if await request.is_disconnected():
                 disconnected.set()
                 task.cancel()
                 raise HTTPException(499, "Visitor disconnected; no additional requests will be sent.")
             await asyncio.sleep(.1)
+        if task.cancelled():
+            if time.monotonic() >= deadline:
+                raise HTTPException(408, "Temporary key expired; provider processing and billing may have occurred.")
+            raise HTTPException(409, "Temporary key removed; provider processing and billing may have occurred.")
         return await task
     finally:
+        if expiry is not None:
+            expiry.cancel()
         key = ""
         if task is not None and not task.done():
             task.cancel()
@@ -272,3 +313,4 @@ async def run(body: Approval, request: Request):
                 await task
         with lock:
             active.discard(owner)
+            running.pop(body.analysis_id, None)

@@ -244,3 +244,85 @@ def test_unresolved_conditional_is_source_validated_but_never_executable(prepare
     result = client.post('/visitor-analysis/run', json=approval(quote(body))).json()
     assert result['status'] == 'complete' and not result['executable_mapping'] and result['human_review_required']
     assert result['sections'][0]['criteria'][0]['logical_operator'] is None
+
+
+@pytest.mark.parametrize("action", ["expiry", "removal"])
+def test_temporary_key_cancels_inflight_and_prevents_next_section(prepared, monkeypatch, action):
+    value = quote(prepared[0])
+    calls = []
+    cancelled = []
+    async def provider(*args):
+        calls.append(1)
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.append(True)
+    async def connected():
+        return False
+    request = SimpleNamespace(client=SimpleNamespace(host='testclient'), url=SimpleNamespace(scheme='https'),
+                              headers={}, base_url='https://trusted.example/', is_disconnected=connected)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    monkeypatch.setattr(visitor, 'KEY_TTL', .03 if action == 'expiry' else 300)
+    async def scenario():
+        task = asyncio.create_task(visitor.run(visitor.Approval(**approval(value)), request))
+        await asyncio.sleep(.01)
+        if action == 'removal':
+            result = await visitor.remove(visitor.Removal(analysis_id=value['analysis_id']), request)
+            assert result == {'removed': True, 'provider_key_revoked': False}
+        with pytest.raises(HTTPException) as error:
+            await task
+        assert error.value.status_code == (408 if action == 'expiry' else 409)
+    asyncio.run(scenario())
+    assert calls == [1] and cancelled == [True]
+    assert not visitor.active and not visitor.running
+    assert KEY not in repr(visitor.plans)
+
+
+def test_removal_before_submission_consumes_capability(prepared):
+    value = quote(prepared[0])
+    assert client.post('/visitor-analysis/remove', json={'analysis_id': value['analysis_id']}).status_code == 200
+    assert client.post('/visitor-analysis/run', json=approval(value)).status_code == 409
+
+
+
+def test_render_https_is_bound_to_platform_hostname(prepared, monkeypatch):
+    monkeypatch.setenv('RENDER', 'true')
+    monkeypatch.setenv('RENDER_EXTERNAL_HOSTNAME', 'triallens-tnbc.onrender.com')
+    with TestClient(app, base_url='http://triallens-tnbc.onrender.com', client=('proxy', 1)) as proxy:
+        headers = {'X-Forwarded-Proto': 'https', 'Origin': 'https://triallens-tnbc.onrender.com'}
+        assert proxy.post('/visitor-analysis/prepare', json=prepared[0], headers=headers).status_code == 200
+        assert proxy.post('/visitor-analysis/prepare', json=prepared[0]).status_code == 400
+        assert proxy.post('/visitor-analysis/prepare', json=prepared[0], headers={**headers, 'Host': 'spoof.invalid'}).status_code == 400
+
+
+
+def test_two_visitors_cancel_independently(prepared, monkeypatch):
+    requests = []
+    def request(host):
+        async def connected():
+            return False
+        return SimpleNamespace(client=SimpleNamespace(host=host), url=SimpleNamespace(scheme='https'),
+                               headers={}, base_url='https://trusted.example/', is_disconnected=connected)
+    one, two = request('visitor-one'), request('visitor-two')
+    first = visitor.prepare(visitor.Preparation(**prepared[0]), one)
+    second = visitor.prepare(visitor.Preparation(**prepared[0]), two)
+    async def scenario():
+        release = asyncio.Event()
+        async def provider(messages, key, disconnected):
+            requests.append(key)
+            await release.wait()
+            return content(messages)
+        monkeypatch.setattr(visitor, 'provider', provider)
+        a = asyncio.create_task(visitor.run(visitor.Approval(**approval(first)), one))
+        b = asyncio.create_task(visitor.run(visitor.Approval(**approval(second, api_key='other-visitor-fixture')), two))
+        await asyncio.sleep(.01)
+        await visitor.remove(visitor.Removal(analysis_id=first['analysis_id']), one)
+        release.set()
+        with pytest.raises(HTTPException):
+            await a
+        result = await b
+        assert result['status'] == 'complete'
+    asyncio.run(scenario())
+    assert requests.count(KEY) == 1
+    assert requests.count('other-visitor-fixture') == 2
+    assert not visitor.active and not visitor.running

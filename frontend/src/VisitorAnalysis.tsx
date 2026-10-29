@@ -3,8 +3,15 @@ import { api, apiUrl } from './api'
 import type { Trial } from './types'
 import { Button } from './ui'
 
-type Quote = { analysis_id: string; model: string; request_count: number; maximum_cost_usd: string; max_output_tokens_per_request: number; expires_in_seconds: number }
-type Result = { status: string; human_review_required: boolean; sections: { section: number; status: string; error?: string; criteria: { criterion_id: string; original_text: string; criterion_type: string }[] }[] }
+type Quote = { analysis_id: string; model: string; request_count: number; maximum_cost_usd: string; max_output_tokens_per_request: number; expires_in_seconds: number; max_input_tokens?: number[] }
+type Criterion = { criterion_id: string; original_text: string; criterion_type: string; dependencies?: Criterion[] | null; logical_operator?: string | null; [field: string]: unknown }
+
+function Condition({ node }: { node: Criterion }) {
+  const fields = Object.entries(node).filter(([field]) => !['criterion_id', 'original_text', 'dependencies'].includes(field))
+  return <section><blockquote>{node.original_text}</blockquote><dl>{fields.map(([field, value]) => <div key={field}><dt>{field.replaceAll('_', ' ')}</dt><dd>{value == null ? 'Unresolved / not extracted' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>{!node.logical_operator && <p>Logical relationship unresolved: human review required.</p>}{node.dependencies?.map(child => <Condition key={child.criterion_id} node={child} />)}</section>
+}
+
+type Result = { full_source_coverage_validated?: boolean; status: string; human_review_required: boolean; sections: { section: number; status: string; error?: string; criteria: Criterion[] }[] }
 
 export default function VisitorAnalysis({ trial }: { trial: Trial }) {
   const [open, setOpen] = useState(false)
@@ -17,10 +24,20 @@ export default function VisitorAnalysis({ trial }: { trial: Trial }) {
   const [result, setResult] = useState<Result | null>(null)
   const controller = useRef<AbortController | null>(null)
   const running = useRef(false)
+  const analysisId = useRef<string | null>(null)
+  const keyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function removeKey() {
+    controller.current?.abort(); setKey(''); setQuote(null); setConfirmed(false)
+    if (keyTimer.current) clearTimeout(keyTimer.current)
+    if (analysisId.current) {
+      void fetch(apiUrl('/visitor-analysis/remove'), { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analysis_id: analysisId.current }) }).catch(() => {})
+      analysisId.current = null
+    }
+  }
   useEffect(() => {
-    const disconnect = () => { controller.current?.abort(); setKey(''); setQuote(null); setConfirmed(false) }
+    const disconnect = () => removeKey()
     window.addEventListener('pagehide', disconnect)
-    return () => { window.removeEventListener('pagehide', disconnect); controller.current?.abort() }
+    return () => { window.removeEventListener('pagehide', disconnect); removeKey() }
   }, [])
   async function prepare() {
     if (running.current) return
@@ -28,7 +45,7 @@ export default function VisitorAnalysis({ trial }: { trial: Trial }) {
     const abort = new AbortController(); controller.current = abort
     try {
       const value = await api<Quote>('/visitor-analysis/prepare', { nct_id: trial.nct_id, snapshot: trial.snapshot, snapshot_sha256: trial.snapshot_sha256 }, abort.signal)
-      if (!abort.signal.aborted) setQuote(value)
+      if (!abort.signal.aborted) { analysisId.current = value.analysis_id; setQuote(value) }
     } catch { if (!abort.signal.aborted) setError('Visitor analysis is unavailable. Verified pricing and secure deployment must be configured by the operator.') }
     finally { running.current = false; setBusy(false) }
   }
@@ -40,32 +57,35 @@ export default function VisitorAnalysis({ trial }: { trial: Trial }) {
     }
     running.current = true; setBusy(true); setError(''); setResult(null)
     const abort = new AbortController(); controller.current = abort
-    const credential = key.trim(); setKey('')
+    let credential = key.trim(); setKey('')
     const approval = quote; setQuote(null); setConfirmed(false)
     setProgress(`Analyzing up to ${approval.request_count} source sections and validating each response. This may take several minutes. No automatic retries.`)
+    keyTimer.current = setTimeout(() => { removeKey(); setError('Temporary key expired. Provider processing and billing may have occurred.') }, 300000)
     try {
-      const response = await fetch(url, { method: 'POST', signal: abort.signal, cache: 'no-store', credentials: 'same-origin',
+      const pending = fetch(url, { method: 'POST', signal: abort.signal, cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ analysis_id: approval.analysis_id, api_key: credential, confirmed: true, maximum_cost_usd: approval.maximum_cost_usd }) })
+      credential = ''
+      const response = await pending
       if (!response.ok) throw new Error('request_failed')
       const value = await response.json() as Result
       if (!abort.signal.aborted) setResult(value)
     } catch { if (!abort.signal.aborted) setError('Analysis could not finish. Check your key, credits or provider availability. Processing and billing may have occurred. No automatic retry was made.') }
-    finally { setKey(''); running.current = false; setBusy(false) }
+    finally { credential = ''; if (keyTimer.current) clearTimeout(keyTimer.current); setKey(''); running.current = false; setBusy(false) }
   }
   return <section aria-label="Visitor NVIDIA analysis">
-    <Button disabled={busy} onClick={() => void prepare()}>Analyze with NVIDIA</Button>
+    <Button disabled={busy} onClick={() => void prepare()}>Run NVIDIA Analysis</Button>
     {open && <div><h3>Use your own Nebius API key</h3>
-      <p>Your key is sent to the TrialLens server and then to Nebius Token Factory for this analysis. It stays in runtime memory, is not saved, and is cleared after use or when you leave this page. Do not submit real patient records. Nebius processes the public trial text under its own policies.</p>
+      <p>Your API key is used temporarily for NVIDIA analysis and is automatically removed from this website after five minutes. It is not saved. Your Nebius Token Factory account may be charged for inference. For additional security, revoke the API key in your Token Factory dashboard after testing.</p><p>Your key is sent to the TrialLens server and then to Nebius Token Factory for this analysis. It stays in runtime memory, is not saved, and is cleared after use or when you leave this page. Do not submit real patient records. Nebius processes the public trial text under its own policies.</p>
       {error && <p role="alert">{error}</p>}
       {busy && <p role="status">{progress}</p>}
-      {quote && <><p>Model: {quote.model}. Planned provider requests: {quote.request_count}. Estimated aggregate maximum: ${quote.maximum_cost_usd}. Output limit: {quote.max_output_tokens_per_request} tokens per request. Approval expires in {quote.expires_in_seconds / 60} minutes.</p>
+      {quote && <><p>Model: {quote.model}. Planned provider requests: {quote.request_count}. Estimated aggregate maximum: ${quote.maximum_cost_usd}. Input token limits per request: {quote.max_input_tokens?.join(', ')}. Output limit: {quote.max_output_tokens_per_request} tokens per request. Approval expires in {quote.expires_in_seconds / 60} minutes.</p>
         <label>Connect Nebius API Key<input type="password" autoComplete="off" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} /></label>
         <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I approve these requests and the displayed aggregate cost ceiling for this trial.</label>
         <Button disabled={busy || !confirmed || !key.trim()} onClick={() => void run()}>Approve cost and analyze</Button></>}
-      <Button onClick={() => { controller.current?.abort(); setKey(''); setQuote(null); setConfirmed(false); setOpen(false) }}>Disconnect key</Button>
-      {result && <article><h3>NVIDIA extraction: {result.status}</h3><p>Automatic source and structure checks only. Clinical review is required; these are not executable mappings or patient eligibility findings.</p>
-        {result.sections.map(section => <section key={section.section}><h4>Section {section.section}: {section.status.replaceAll('_', ' ')}</h4>{section.error && <p>{section.error.replaceAll('_', ' ')}. Processing and billing may have occurred; no retry was made.</p>}{section.criteria.map(node => <blockquote key={node.criterion_id}>{node.original_text}</blockquote>)}</section>)}
+      <Button onClick={() => { removeKey(); setOpen(false) }}>Remove Key Now</Button>
+      {result && <article><h3>NVIDIA extraction: {result.status}</h3><p>Full source coverage: {result.full_source_coverage_validated ? 'validated' : 'incomplete or unverified'}.</p><p>Automatic source and structure checks only. Clinical review is required; these are not executable mappings or patient eligibility findings.</p>
+        {result.sections.map(section => <section key={section.section}><h4>Section {section.section}: {section.status.replaceAll('_', ' ')}</h4>{section.error && <p>{section.error.replaceAll('_', ' ')}. Processing and billing may have occurred; no retry was made.</p>}{section.criteria.map(node => <div key={node.criterion_id}><Condition node={node} /><p>Coverage: source validated. Unresolved conditions require human review.</p></div>)}</section>)}
       </article>}
     </div>}
   </section>
