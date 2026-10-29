@@ -2,71 +2,111 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TOP = {'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', '.gitignore', '.dockerignore', '.env.example',
+TOP = {'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', '.gitignore', '.gitattributes', '.dockerignore', '.env.example',
        'Dockerfile', 'render.yaml', 'requirements.txt', 'requirements-demo.lock.txt'}
 HELPERS = {'public_demo.py', 'serve_public.py', 'readiness.py', 'demo_smoke.py', 'publication_audit.py',
            'nebius_check.py', 'extraction_authorization.py', 'extract_criteria.py', 'recover_extraction.py',
            'benchmark_eligibility.py', 'verify_offline_workflow.py', 'prioritization_experiment.py'}
+HELPERS.add('research_public.py')
 PRIVATE_TESTS = {'test_recomb_evaluation.py', 'test_prioritization_followup.py', 'test_prioritization_sensitivity.py',
                  'test_prioritization_validation.py', 'test_reliability_model.py', 'test_release_preparation.py'}
 FRONTEND = {'package.json', 'package-lock.json', 'index.html', 'tsconfig.json', 'vite.config.ts', 'playwright.config.mjs'}
 MARKERS = {'cache/.gitkeep', 'data/raw/.gitkeep', 'data/synthetic/.gitkeep', 'data/processed/.gitkeep', 'results/.gitkeep'}
 FIXTURES = {'synthetic_criteria.json', 'extraction_snapshot.json', 'extraction_mock.json', 'eligibility_benchmark_case.json'}
+LEGACY_FILES = {'frontend/src/ProductHome.tsx', 'backend/app/public_live.py', 'backend/tests/test_public_live.py'}
 RESEARCH_CODE = {
-    'research/requirements.txt', 'research/synthetic.py', 'research/test_results.py',
-    'research/decision_review_v1/model.py', 'research/decision_review_v1/test_model.py',
-    'research/constrained_review_v1/solver.py', 'research/constrained_review_v1/factorized.py',
-    'research/constrained_review_v1/test_solver.py', 'research/constrained_review_v1/test_factorized.py',
-    'research/constrained_review_v1/test_certificates.py',
-    'research/compiled_review_v1/belief.py', 'research/compiled_review_v1/test_belief.py',
+    'research/certified_review_v1/belief.py',
+    'research/certified_review_v1/certificate.py',
+    'research/certified_review_v1/policy.py',
+    'research/certified_review_v1/test_methods.py',
+    'research/compiled_review_v1/belief.py',
+    'research/compiled_review_v1/test_belief.py',
     'research/compiled_review_v1/test_limits.py',
-    'research/certified_review_v1/belief.py', 'research/certified_review_v1/certificate.py',
-    'research/certified_review_v1/policy.py', 'research/certified_review_v1/test_methods.py',
+    'research/constrained_review_v1/factorized.py',
+    'research/constrained_review_v1/solver.py',
+    'research/constrained_review_v1/test_certificates.py',
+    'research/constrained_review_v1/test_factorized.py',
+    'research/constrained_review_v1/test_solver.py',
+    'research/decision_review_v1/model.py',
+    'research/decision_review_v1/test_model.py',
+    'research/requirements.txt',
+    'research/synthetic.py',
+    'research/test_results.py',
 }
+
 AGGREGATES = {
-    'results/recomb/20261026-compiled-review-v2/benchmark_summary.csv',
-    'results/recomb/20261026-compiled-review-v2/paired_effects.csv',
-    'results/recomb/20261026-certified-review-v1/comparison.csv',
-    'results/recomb/20261026-certified-review-v1/paired_effects.csv',
-    'research/metabric_realdata_v1/results/main_table.csv',
-    'research/metabric_risk_reconciliation_v1/results/cohort_transition.csv',
-    'research/metabric_risk_reconciliation_v1/results/budget_error_tradeoffs.csv',
-    'research/metabric_risk_reconciliation_v1/results/paired_statistics.csv',
-    'research/matched_coverage_v1/results/primary_table.csv',
-    'research/matched_coverage_v1/results/primary_statistics.csv',
+    'research/clinical_extraction_generalization_v1/results/component_transitions.csv',
+    'research/clinical_extraction_generalization_v1/results/confidence_intervals.csv',
+    'research/clinical_extraction_generalization_v1/results/field_metrics.csv',
+    'research/clinical_extraction_generalization_v1/results/method_metrics.csv',
+    'research/clinical_extraction_generalization_v1/results/withholding.csv',
     'research/clinical_validation_v1/results/primary_operating_points.csv',
     'research/clinical_validation_v1/results/primary_statistics.csv',
-    'research/clinical_extraction_generalization_v1/results/method_metrics.csv',
-    'research/clinical_extraction_generalization_v1/results/confidence_intervals.csv',
-    'research/clinical_extraction_generalization_v1/results/withholding.csv',
-    'research/clinical_extraction_generalization_v1/results/field_metrics.csv',
-    'research/clinical_extraction_generalization_v1/results/component_transitions.csv',
+    'research/matched_coverage_v1/results/primary_statistics.csv',
+    'research/matched_coverage_v1/results/primary_table.csv',
+    'research/metabric_realdata_v1/results/main_table.csv',
+    'research/metabric_risk_reconciliation_v1/results/budget_error_tradeoffs.csv',
+    'research/metabric_risk_reconciliation_v1/results/cohort_transition.csv',
+    'research/metabric_risk_reconciliation_v1/results/paired_statistics.csv',
+    'results/recomb/20261026-certified-review-v1/comparison.csv',
+    'results/recomb/20261026-certified-review-v1/paired_effects.csv',
+    'results/recomb/20261026-compiled-review-v2/benchmark_summary.csv',
+    'results/recomb/20261026-compiled-review-v2/paired_effects.csv',
 }
+
 PATTERNS = {
     'private_key': r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
     'provider_token': r'\b(?:ghp_|github_pat_|sk-)[A-Za-z0-9_-]{24,}\b',
     'aws_access_id': r'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b',
     'credential_url': r'https?://[^\s/:]+:[^\s/@]+@',
     'personal_path': r'[A-Z]:[\\/]Users[\\/][^\s]+',
+    'jwt': r'\beyJ[A-Za-z0-9_-]{12,}\.eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{16,}\b',
+    'vendor_key': r'\b(?:nvapi-|hf_)[A-Za-z0-9_-]{24,}\b',
 }
+
+
+def private_path(path):
+    lower = [part.lower() for part in path.parts]
+    return (any(part in {'authorizations', '.git', '.aws', '.azure', '.ssh', '.kube', 'node_modules', '__pycache__'} for part in lower)
+            or any(part.startswith(('credentials', 'billing', 'invoice')) for part in lower)
+            or any(part.startswith('.env') for part in lower) and path.as_posix() != '.env.example'
+            or path.name.lower() in {'agents.md', 'skill.md', 'raw_response.json', '.netrc', '.npmrc', '.pypirc'}
+            or path.suffix.lower() in {'.claim', '.key', '.pem', '.pfx', '.p12', '.log'})
+
+
+def runtime_files():
+    names = set()
+    for line in (ROOT / '.dockerignore').read_text().splitlines():
+        if not line.startswith(('!research/', '!results/', '!data/raw/trials/')) or line.endswith('/'):
+            continue
+        name = line[1:]
+        path = Path(name)
+        if path.is_absolute() or '..' in path.parts or any(char in name for char in '*?[') or private_path(path):
+            raise ValueError('Literal runtime paths required')
+        names.add(name)
+    return names
 
 
 def eligible(name):
     path = Path(name)
-    if path.is_absolute() or '..' in path.parts:
+    if path.is_absolute() or '..' in path.parts or private_path(path):
         return False
     value = path.as_posix()
+    if value in LEGACY_FILES:
+        return False
+    if value in runtime_files() | RESEARCH_CODE | AGGREGATES:
+        return True
     if any(p.lower() in {'node_modules', '__pycache__', '.git', 'dist', 'authorizations'} for p in path.parts):
         return False
     if path.suffix.lower() in {'.md', '.markdown', '.pdf', '.zip', '.log', '.claim', '.key', '.pem'}:
         return value == 'README.md'
-    if value in RESEARCH_CODE | AGGREGATES:
-        return True
     if value in TOP | MARKERS | {'scripts/public_release.py', 'benchmarks/eligibility/annotation.schema.json'}:
         return True
     if path.parent.as_posix() == 'backend' and path.name in HELPERS:
@@ -91,31 +131,39 @@ def eligible(name):
 
 def inventory():
     candidates = [ROOT/p for p in TOP | MARKERS]
-    candidates.extend(ROOT/p for p in RESEARCH_CODE | AGGREGATES)
     for folder in ('backend', 'frontend/src', 'frontend/e2e', 'third_party/licenses', 'assets/screenshots'):
         candidates.extend((ROOT/folder).rglob('*'))
     candidates.extend(ROOT/'frontend'/p for p in FRONTEND)
     candidates.extend([Path(__file__), ROOT/'benchmarks/eligibility/annotation.schema.json'])
+    candidates.extend(ROOT/name for name in runtime_files() | RESEARCH_CODE | AGGREGATES)
     paths = sorted({p.relative_to(ROOT).as_posix() for p in candidates
                     if p.is_file() and not p.is_symlink() and eligible(p.relative_to(ROOT))})
-    missing = [p for p in TOP | MARKERS | RESEARCH_CODE | AGGREGATES if not (ROOT/p).is_file()]
+    missing = [p for p in TOP | MARKERS | runtime_files() | RESEARCH_CODE | AGGREGATES if not (ROOT/p).is_file() or (ROOT/p).is_symlink()]
     if missing:
         raise FileNotFoundError(', '.join(sorted(missing)))
     return paths
 
 
-def audit(paths):
+def audit(paths, contents=None):
     findings = []
     for name in paths:
         path = ROOT/name
         if path.suffix == '.png':
             continue
-        text = path.read_text(encoding='utf-8')
-        if name in AGGREGATES:
+        text = contents[name].decode('utf-8-sig') if contents is not None else path.read_text(encoding='utf-8-sig')
+        if path.suffix == '.csv' and name.startswith(('research/', 'results/')):
             fields = set(next(csv.reader(text.splitlines()), []))
             private_fields = {'patient_id', 'patient_key', 'study_id', 'report_id', 'source_quote', 'raw_text', 'image_path', 'pdf_path'}
-            if fields & private_fields or re.search(r'\bTCGA-[A-Z0-9]{2}-[A-Z0-9]{4}\b|\bMB-\d{4,}\b', text):
+            if fields & private_fields:
                 findings.append(dict(path=name, category='patient_level_content'))
+        if name.startswith(('research/', 'results/')) and re.search(r'\bTCGA-[A-Z0-9]{2}-[A-Z0-9]{4}\b|\bMB-\d{4,}\b', text):
+            findings.append(dict(path=name, category='patient_level_content'))
+        for variable in ('NEBIUS_API_KEY', 'TRIALLENS_OPERATOR_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'):
+            secret = os.environ.get(variable, '')
+            if len(secret) >= 16 and secret in text:
+                findings.append(dict(path=name, category='environment_credential'))
+        if re.search(r'^\s*(?:<\|(?:im_start|im_end)\|>|<(?:user|assistant)>|#{1,4}\s+(?:User|Assistant)\s*:)', text, re.M):
+            findings.append(dict(path=name, category='conversation_transcript'))
         if name in MARKERS and text.strip():
             raise ValueError(f'Nonempty marker: {name}')
         for category, pattern in PATTERNS.items():
@@ -123,26 +171,61 @@ def audit(paths):
                 continue
             for match in re.finditer(pattern, text, re.I if category == 'personal_path' else 0):
                 findings.append(dict(path=name, category=category, line=text.count('\n', 0, match.start())+1))
+    assert all(p == 'README.md' or p in runtime_files() for p in paths if p.lower().endswith('.md'))
     if findings:
         raise ValueError(json.dumps(findings))
-    assert [p for p in paths if p.lower().endswith('.md')] == ['README.md']
     return findings
+
+
+def staged_audit():
+    git = ['git', '-c', f'safe.directory={ROOT.as_posix()}', '-C', str(ROOT)]
+    def run(arguments):
+        return subprocess.run(git + arguments, check=True, capture_output=True).stdout
+    entries = run(['ls-files', '--stage', '-z']).split(b'\0')
+    contents = {}
+    identifiers = {}
+    for entry in entries:
+        if not entry:
+            continue
+        record, name = entry.split(b'\t', 1)
+        mode, identifier, stage = record.split()
+        name = name.decode('utf-8')
+        if mode not in (b'100644', b'100755') or stage != b'0' or not eligible(name):
+            raise ValueError(f'Unreviewed index entry: {name}')
+        contents[name] = run(['cat-file', 'blob', identifier.decode()])
+        identifiers[name] = identifier
+    if set(contents) != set(inventory()):
+        raise ValueError('Index differs from reviewed inventory')
+    audit(sorted(contents), contents)
+    if any(run(['hash-object', '--path', name, str(ROOT/name)]).strip() != identifiers[name] for name in contents):
+        raise ValueError('Working files differ from reviewed index')
+    diff = run(['diff', '--cached', '--binary', '--no-ext-diff'])
+    return {'files': len(contents), 'bytes': sum(map(len, contents.values())),
+            'staged_diff_sha256': hashlib.sha256(diff).hexdigest(),
+            'files_sha256': {name: hashlib.sha256(data).hexdigest() for name, data in contents.items()},
+            'findings': []}
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--stage', type=Path)
+    parser.add_argument('--staged', action='store_true')
     args = parser.parse_args()
+    if args.staged:
+        report = staged_audit()
+        (ROOT/'cache').mkdir(exist_ok=True)
+        (ROOT/'cache/staged-content-audit.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+        print(f"Reviewed staged files: {report['files']}")
+        return
     paths = inventory()
     audit(paths)
     report = dict(retained_files=len(paths), files={p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths},
-                  excluded=['AGENTS.md and internal prompts', 'docs/', 'research and results outside the explicit allowlist',
-                            'data/ except empty markers', 'cache/ except empty marker', 'logs/', 'models/',
+                  excluded=['AGENTS.md and internal prompts', 'docs/', 'research/ and results/ except explicit public runtime allowlist',
+                            'data/ except explicit public registry snapshots and empty markers', 'cache/ except empty marker', 'logs/', 'models/',
                             'figures/', 'scripts/paper_figures/', 'archives, PDFs, private Markdown and credentials',
                             'historical experiment-only CLI/tests', 'virtual environments, node_modules and build outputs'],
-                  license='MPL-2.0; ownership confirmation required before publication.',
-                  ownership_confirmed=False,
-                  markdown=['README.md'], findings=[])
+                  license=(ROOT/'LICENSE').read_text(encoding='utf-8').splitlines()[0],
+                  markdown=[p for p in paths if p.endswith('.md')], findings=[])
     if args.stage:
         target = (ROOT/args.stage).resolve()
         if not target.is_relative_to((ROOT/'cache').resolve()) or target.exists():
@@ -157,7 +240,7 @@ def main():
     (ROOT/'cache/public-release-inventory.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
     print(f'Retained files: {len(paths)}')
     print('Inventory: cache/public-release-inventory.json')
-    print('License: MPL-2.0; rights unconfirmed')
+    print('License: see LICENSE')
 
 
 if __name__ == '__main__':

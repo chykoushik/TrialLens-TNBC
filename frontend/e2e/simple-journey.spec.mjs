@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test.skip(!process.env.DROPDOWN_BACKEND, 'Requires local offline FastAPI')
@@ -10,7 +11,7 @@ async function setup(page) {
     const evaluate = /^\/(tnbc|research)\/cases\/[^/]+\/evaluate$/.test(path)
     const save = /^\/annotations\/NCT\d{8}\/versions$/.test(path)
     const read = request.method() === 'GET' && (/^\/(health|(tnbc|research)\/cases|research\/trials)$/.test(path) || /^\/annotations\/NCT\d{8}$/.test(path))
-    expect(read || request.method() === 'POST' && (evaluate || save), `Offline route ${path}`).toBe(true)
+    expect(read || path === '/research/results' || request.method() === 'POST' && (evaluate || save), `Offline route ${path}`).toBe(true)
     if (request.method() === 'POST') state.posts.push(path)
     if (evaluate) state.evaluations.push(request.postDataJSON())
     const response = await route.fetch({ url: `${backend.origin}${path}${url.search}` })
@@ -22,16 +23,15 @@ async function setup(page) {
   return state
 }
 const unclear = data => data.assessment.decisions.flatMap(item => item.assessment.assessments).filter(node => ['unknown', 'temporal', 'conflict'].includes(node.state)).length
-async function go(page, name) {
-  const nav = page.getByRole('navigation', { name: 'Main navigation' })
-  if (!await nav.isVisible()) await page.getByRole('button', { name: 'Open navigation' }).click()
-  await nav.getByRole('button', { name, exact: true }).click()
-}
+const go = navigate
 
-test('first visit: three actions to review an existing report, plain before/after and desktop/mobile layout', async ({ page }, info) => {
+test('first visit: guided steps to review an existing report, plain before/after and desktop/mobile layout', async ({ page }, info) => {
   const state = await setup(page)
   await page.screenshot({ path: info.outputPath('home-desktop.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled()
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('radio').first()).toBeEnabled()
   const before = structuredClone(state.last)
   expect(before.case_id).toBe('tnbc-record-gaps')
@@ -49,13 +49,14 @@ test('first visit: three actions to review an existing report, plain before/afte
   expect(Object.keys(state.evaluations.at(-1).outcomes)).toHaveLength(1)
   expect(state.last.spent).toBe('2')
   await page.screenshot({ path: info.outputPath('result-desktop.png'), fullPage: true })
-  await go(page, 'Review Evidence')
+  await page.getByRole('button', { name: /Review all evidence/ }).click()
   await expect(page.getByLabel('Fictional evidence summary')).toBeVisible()
-  await page.getByRole('button', { name: 'Review the proposed report', exact: true }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.setViewportSize({ width: 390, height: 844 })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('demo-mobile.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
+  await navigate(page, 'Home')
   await page.screenshot({ path: info.outputPath('home-mobile.png'), fullPage: true })
   expect(state.posts.every(path => path.endsWith('/evaluate'))).toBe(true)
 })
@@ -82,7 +83,10 @@ test('real trial reading is one selection and anonymous annotation autosaves onl
 test('mobile visitor can select and apply without opening advanced controls', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const state = await setup(page)
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled()
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('radio').first()).toBeEnabled()
   await page.screenshot({ path: info.outputPath('initial-mobile-demo.png'), fullPage: true })
   await page.getByRole('radio').first().check()

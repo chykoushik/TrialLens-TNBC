@@ -1,78 +1,97 @@
-import copy
+import hashlib
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
-from backend import recover_extraction as recovery
-from backend.tests.test_extraction import extraction_case
+from backend.app import nebius
+from backend.app.extraction_recovery import recover_truncated_criteria
+from backend.app.extraction_source import ROOT, load_source
 from backend.app.extraction_validation import validate_extraction
+from backend.app.inference_review import report_for
+from backend.app.trial_extraction import extraction_report
+
+ATTEMPT = ROOT / "results/extraction/20261029T000537077640Z_f0f39c0f41224168a9120332d84ec55f"
 
 
-def test_null_evidence_normalization(extraction_case):
-    _, _, source, payload = extraction_case
-    original = copy.deepcopy(payload)
-    payload["evidence"][0].update(logical_operator=None, dependencies=None)
-    candidate, changes = recovery.normalize_evidence(payload)
-    assert candidate == original
-    assert len(changes) == 2
-    assert "logical_operator" in payload["evidence"][0]
-    result, errors = validate_extraction(json.dumps(candidate), source,
-        method="offline-test", timestamp="2026-10-26T00:00:00Z")
-    assert result is not None and not errors
+@pytest.fixture
+def saved(monkeypatch):
+    if not ATTEMPT.is_dir():
+        pytest.skip("Private saved provider artifact not distributed")
+    def forbidden(*args, **kwargs):
+        pytest.fail("Network and reservation prohibited")
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", forbidden)
+    monkeypatch.setattr(nebius, "reserve_live_request", forbidden)
+    monkeypatch.setattr("backend.extraction_authorization.reserve_authorized_request", forbidden)
+    paths = list(ATTEMPT.glob("*")) + list((ROOT / "results/nebius/authorizations").glob("*")) + [ROOT / "results/nebius/live-request.claim"]
+    manifest = json.loads((ATTEMPT / "manifest.json").read_text())
+    source = load_source(Path(manifest["source_snapshot"]), manifest["nct_id"])
+    paths.append(ROOT / manifest["source_snapshot"])
+    before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()}
+    raw = json.loads((ATTEMPT / "raw_response.json").read_text(encoding="utf-8"))
+    yield source, manifest, raw
+    assert before == {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in before}
 
 
-@pytest.mark.parametrize("field,value", [("logical_operator", "OR"), ("dependencies", []),
-                                         ("unexpected", None)])
-def test_non_null_or_unknown_extras_rejected(extraction_case, field, value):
-    _, _, source, payload = extraction_case
-    payload["evidence"][0][field] = value
-    candidate, _ = recovery.normalize_evidence(payload)
-    result, errors = validate_extraction(json.dumps(candidate), source,
-        method="offline-test", timestamp="2026-10-26T00:00:00Z")
-    assert result is None
-    assert any(e["field"] == f"evidence.0.{field}" for e in errors)
+def test_private_saved_response_is_truncated_not_reasoning_or_parser_rejection(saved, monkeypatch):
+    source, manifest, raw = saved
+    choice = raw["choices"][0]
+    assert choice["finish_reason"] == "length"
+    assert raw["usage"]["completion_tokens"] == 8192
+    assert raw["usage"]["completion_tokens_details"]["reasoning_tokens"] == 0
+    assert manifest["estimated_cost_usd"] == .00813
+    content = choice["message"]["content"]
+    with pytest.raises(json.JSONDecodeError, match="Unterminated string"):
+        json.loads(content)
+    model, errors = validate_extraction(content, source, method="offline-original", timestamp=manifest["timestamp"])
+    assert model is None and errors[0]["code"] == "invalid_json_or_schema"
+    response = httpx.Response(200, content=(ATTEMPT / "raw_response.json").read_bytes(), request=httpx.Request("POST", "https://example.invalid"))
+    monkeypatch.setattr(httpx.Client, "post", lambda *a, **k: response)
+    with pytest.raises(nebius.NebiusError) as failure:
+        nebius.chat_completion([], config=nebius.NebiusConfig(api_key="synthetic-provider-secret", model=manifest["requested_model"], base_url=nebius.BASE_URL), max_tokens=8192)
+    assert failure.value.code == "incomplete_response"
 
 
-def test_recovery_preserves_originals_and_rejects_bad_spans(extraction_case, tmp_path, monkeypatch):
-    _, _, source, payload = extraction_case
-    monkeypatch.setattr(recovery, "ROOT", tmp_path)
-    monkeypatch.setattr(recovery, "load_source", lambda *args: source)
-    directory = tmp_path / "results/extraction/attempt"
-    directory.mkdir(parents=True)
-    payload["evidence"][0].update(logical_operator=None, dependencies=None)
-    payload["evidence"][0]["original_span"]["start"] += 1
-    manifest = {"source_snapshot": source.source_snapshot, "snapshot_sha256": source.sha256,
-                "nct_id": source.nct_id}
-    raw = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}]}
-    for name, value in (("manifest.json", manifest), ("raw_response.json", raw)):
-        (directory / name).write_text(json.dumps(value), encoding="utf-8")
-    before = {p.name: p.read_bytes() for p in directory.iterdir()}
-    destination, report, errors = recovery.recover(directory)
-    assert report["status"] == "validation_failed"
-    assert report["human_review_required"] is True
-    assert report["request_count"] == 0
-    assert json.loads((destination / "validated.json").read_text()) is None
-    assert any(e["code"] == "unsupported_original_text" for e in errors)
-    assert before == {p.name: p.read_bytes() for p in directory.iterdir()}
-    manifest["snapshot_sha256"] = "0" * 64
-    (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        recovery.recover(directory)
-    manifest["snapshot_sha256"] = source.sha256
-    (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    raw["choices"][0]["finish_reason"] = "length"
-    (directory / "raw_response.json").write_text(json.dumps(raw), encoding="utf-8")
-    with pytest.raises(ValueError, match="Incomplete"):
-        recovery.recover(directory)
+def test_private_saved_prefix_recovery_preserves_objects_and_rejects_execution(saved):
+    source, manifest, raw = saved
+    content = raw["choices"][0]["message"]["content"]
+    result = recover_truncated_criteria(content, source, finish_reason="length", timestamp=manifest["timestamp"])
+    assert result["complete_top_level_objects"] == 23
+    assert result["complete_nodes_including_dependencies"] == 56
+    assert result["exact_source_top_level_objects"] == 21
+    assert result["exact_source_nodes"] == 39
+    assert not result["complete_extraction"] and not result["assessment_allowed"]
+    assert not result["provider_evidence_recovered"]
+    assert {row["code"] for row in result["prefix_validation_errors"]} == {"missing_evidence", "uncovered_source_text"}
+    for item in result["objects"]:
+        span = item["response_span"]
+        assert json.loads(content[span["start"]:span["end"]]) == item["candidate"]
+        for check in item["source_checks"]:
+            assert check["span_origin"] == "offline_exact_text_search_not_provider_evidence"
+            assert not check["executable"]
+    assert result["objects"][-1]["candidate"]["criterion_id"] == "NCT04331067_EXC_010"
+    assert "NCT04331067_EXC_011" not in json.dumps(result["objects"])
 
 
-def test_normalization_preserves_unicode_and_unresolved_logic():
-    payload = {"criteria": [{"original_text": "Received \u2264 5 therapies", "logical_operator": None,
-                             "dependencies": None}],
-               "evidence": [{"criterion_id": "c1", "logical_operator": None, "dependencies": None,
-                             "original_span": {"start": 4, "end": 26}, "fields": {}}]}
-    candidate, changes = recovery.normalize_evidence(payload)
-    assert candidate["criteria"] == payload["criteria"]
-    assert candidate["evidence"][0]["original_span"] == payload["evidence"][0]["original_span"]
-    assert len(changes) == 2
+def test_read_only_operator_report_recovers_without_promoting_partial_candidate(saved):
+    source, manifest, _ = saved
+    result = extraction_report(source, ATTEMPT, persist=False)
+    assert result["manifest"]["status"] == "failed" and result["candidate"] is None and result["validated"] is None
+    assert result["unsupported_criteria"] == [{"criterion_id": None, "reason": "incomplete_provider_response"}]
+    assert result["partial_recovery"]["complete_top_level_objects"] == 23
+    _, report, model = report_for(manifest["nct_id"], ATTEMPT.name)
+    assert not report["review_checks_passed"] and model is None
+
+
+@pytest.mark.parametrize("content", ['{"evidence": [], "criteria": [{"original_text":"x"}', 'commentary {"criteria": [{"original_text":"x"}', '{"criteria":[{"original_text":"x","original_text":"y"}'])
+def test_recovery_does_not_scan_commentary_reorder_or_accept_duplicate_keys(saved, content):
+    source, manifest, _ = saved
+    result = recover_truncated_criteria(content, source, finish_reason="length", timestamp=manifest["timestamp"])
+    assert result is None or result["complete_top_level_objects"] == 0
+
+
+@pytest.mark.parametrize("reason", ["stop", "content_filter", None])
+def test_recovery_requires_explicit_output_limit(saved, reason):
+    source, manifest, raw = saved
+    assert recover_truncated_criteria(raw["choices"][0]["message"]["content"], source, finish_reason=reason, timestamp=manifest["timestamp"]) is None

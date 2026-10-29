@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test'
+import { navigate } from './navigation.mjs'
+
+for (const mobile of [false, true]) {
+  test(`search, analyze, execute planner and inspect research ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 })
+    let paidPosts = 0
+    await page.route('**/extractions', route => { paidPosts++; return route.abort() })
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Understand a clinical trial.' })).toBeVisible()
+    await page.getByRole('combobox', { name: 'Search by', exact: true }).selectOption('nct_id')
+    await page.getByLabel('NCT identifier', { exact: true }).fill('NCT04331067')
+    await page.getByRole('button', { name: 'Search trials', exact: true }).click()
+    await page.getByRole('button', { name: 'Select NCT04331067', exact: true }).click()
+    await expect(page.getByText('Original ClinicalTrials.gov record', { exact: true })).toHaveAttribute('href', 'https://clinicaltrials.gov/study/NCT04331067')
+    await page.getByRole('button', { name: 'Analyze trial', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Trial analysis results', exact: true })).toBeVisible()
+    await expect(page.getByText(/Patient assessment is unavailable/)).toBeVisible()
+    await expect(page.getByLabel('Operator access code')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Explore the research planner', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Available reports', exact: true })).toBeVisible()
+    await page.getByRole('combobox', { name: 'Review budget', exact: true }).selectOption('3')
+    await expect(page.getByText('Computing the constrained policy and source probabilities…')).toHaveCount(0)
+    const choice = page.locator('select[aria-label^="Outcome for report"]:enabled').first()
+    await choice.selectOption('1')
+    await expect(page.getByText(/1 \/ 3/)).toBeVisible()
+    await page.getByRole('button', { name: 'Restart review', exact: true }).click()
+    await expect(page.getByText(/0 \/ 3/)).toBeVisible()
+    await navigate(page, 'Research Results')
+    await expect(page.getByRole('heading', { name: 'Explore the full evaluation', exact: true })).toBeVisible()
+    await page.getByRole('combobox', { name: 'Study and result table', exact: true }).selectOption('tcga-holdout')
+    await expect(page.getByRole('heading', { name: 'TCGA internal holdout extraction', exact: true })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true)
+    expect(paidPosts).toBe(0)
+  })
+}

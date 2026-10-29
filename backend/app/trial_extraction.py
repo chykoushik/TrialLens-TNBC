@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from backend.app.extraction import extract_snapshot
 from backend.app.extraction_prompt import CLINICAL_FIELDS
 from backend.app.extraction_source import ROOT, EligibilitySource
+from backend.app.extraction_recovery import recover_truncated_criteria
 
 MOCK_VERSION = "verbatim-sections-v1"
 
@@ -40,13 +41,14 @@ def run_mock(source: EligibilitySource):
     return run_extraction(source)
 
 
-def run_extraction(source: EligibilitySource, *, live: bool = False, live_approved: bool = False):
+def run_extraction(source: EligibilitySource, *, live: bool = False, live_approved: bool = False, authorization_id: str | None = None):
     cache = ROOT / "cache"
     cache.mkdir(exist_ok=True)
     if live:
         output = extract_snapshot(
             Path(source.source_snapshot), source.nct_id, mock=False,
             live_approved=live_approved, expected_sha256=source.sha256,
+            **({'authorization_id': authorization_id} if authorization_id else {}),
         )
     else:
         output = run_mock_snapshot(source, cache)
@@ -61,7 +63,7 @@ def run_mock_snapshot(source, cache):
     return output
 
 
-def extraction_report(source, output):
+def extraction_report(source, output, *, persist=True):
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     privacy_failed = manifest.get("status") == "privacy_failed"
     if not privacy_failed and (manifest.get("snapshot_sha256") != source.sha256
@@ -79,18 +81,33 @@ def extraction_report(source, output):
         candidate = None
     if privacy_failed:
         candidate = None
+    partial_recovery = None
+    finish_reason = None
+    if not privacy_failed and manifest.get("mode") == "live" and isinstance(raw, dict):
+        try:
+            choice = raw["choices"][0]
+            finish_reason = choice.get("finish_reason")
+            partial_recovery = recover_truncated_criteria(choice["message"]["content"], source,
+                finish_reason=finish_reason, timestamp=manifest["timestamp"])
+        except (KeyError, IndexError, TypeError, RecursionError):
+            pass
     candidates = candidate.get("criteria", []) if isinstance(candidate, dict) else []
     unsupported = [{"criterion_id": node.get("criterion_id"), "reason": "unreviewed_semantics_no_execution_mapping"}
                    for node in candidates if isinstance(node, dict)] if isinstance(candidates, list) else []
     if not candidates:
-        unsupported.append({"criterion_id": None, "reason": "credential_echo_redacted" if privacy_failed else "no_supported_section_headings"})
+        reason = ("credential_echo_redacted" if privacy_failed else
+                  "incomplete_provider_response" if finish_reason in ("length", "content_filter") else
+                  "no_supported_section_headings" if manifest.get("mode") == "mock" else "no_parseable_structured_criteria")
+        unsupported.append({"criterion_id": None, "reason": reason})
     source_payload = None if privacy_failed else asdict(source)
     report = {"manifest": manifest, "mock_version": MOCK_VERSION, "source": source_payload,
               "validated": validated, "validation_errors": errors, "candidate": candidate,
               "unsupported_criteria": unsupported, "assessment_allowed": False,
               "assessment_block_reason": "Real criteria require validated extraction, human-reviewed executable bindings and compatible synthetic evidence; this workflow does not accept assessment inputs.",
               "output_directory": output.relative_to(ROOT).as_posix()}
-    for name, value in (("source.json", source_payload), ("integration.json", report)):
+    if partial_recovery is not None:
+        report["partial_recovery"] = partial_recovery
+    for name, value in (("source.json", source_payload), ("integration.json", report)) if persist else ():
         with (output / name).open("x", encoding="utf-8") as file:
             json.dump(value, file, ensure_ascii=False, indent=2)
     return report

@@ -72,6 +72,7 @@ def extract_snapshot(
             if authorization_id:
                 from backend.extraction_authorization import reserve_authorized_request
                 manifest["request_authorization_id"] = authorization_id
+                manifest["request_id"] = authorization_id
                 manifest["request_claim"] = reserve_authorized_request(authorization_id, source, config, output)
             else:
                 reserve_live_request()

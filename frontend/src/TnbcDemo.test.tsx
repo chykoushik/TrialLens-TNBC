@@ -1,3 +1,4 @@
+import { openResearchSection, openDemo } from './testNavigation'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App from './App'
@@ -33,7 +34,7 @@ beforeEach(() => {
 
 async function openTnbcCase(caseId = 'tnbc-record-gaps') {
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: 'Try the demo' }))
+  openDemo()
   fireEvent.click(screen.getByText('Advanced Mode', { selector: 'summary' }))
   await waitFor(() => expect(screen.getByLabelText('Fictional TNBC case')).toBeEnabled())
   fireEvent.change(screen.getByLabelText('Fictional TNBC case'), { target: { value: caseId } })
@@ -121,7 +122,7 @@ test('uses meaningful existing-record actions and resets hypothetical updates', 
 
 test('public source view reads saved text directly and keeps extraction optional', async () => {
   await openTnbcCase()
-  fireEvent.click(screen.getByRole('button', { name: 'Explore Trials' }))
+  openResearchSection('Browse saved trials')
   fireEvent.click(await screen.findByRole('button', { name: /NCT00000001/ }))
   expect(screen.getByRole('link', { name: /Read the ClinicalTrials.gov record/ })).toHaveAttribute('href', 'https://clinicaltrials.gov/study/NCT00000001')
   expect(screen.getByText('Unmodified source display fixture', { selector: 'blockquote' })).toBeInTheDocument()

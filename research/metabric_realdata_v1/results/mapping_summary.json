@@ -1,0 +1,46 @@
+{
+  "mapping_atoms": 18,
+  "distinct_mapped_trials": 6,
+  "patient_trial_pairs": 15054,
+  "pairs_with_observed_subpredicate": 14933,
+  "criterion_assessments": 45162,
+  "complete_current_trial_eligibility_labels": 0,
+  "benchmark_primary_proxy_trial_ids": [
+    "NCT00246571",
+    "NCT07341867"
+  ],
+  "benchmark_fields": [
+    "ER_STATUS",
+    "PR_STATUS",
+    "HER2_STATUS",
+    "TUMOR_STAGE"
+  ],
+  "benchmark_graphs": [
+    [
+      "AND",
+      0,
+      1,
+      2
+    ],
+    [
+      "AND",
+      0,
+      1,
+      2,
+      3
+    ]
+  ],
+  "benchmark_complete_patients": 1466,
+  "development_complete_patients": 445,
+  "evaluation_complete_patients": 1021,
+  "benchmark_proxy_patient_trial_pairs": 2042,
+  "reasons_excluded_from_benchmark": "Any unknown source receptor or stage predicate; assessments still retain these patients.",
+  "skipped_budget_6": "Only four nonconstant mapped clinical attributes are defensibly usable; no fictitious evidence items added.",
+  "unsupported_equivalences": [
+    "Age at diagnosis is not age at screening",
+    "Historical chemotherapy YES/NO is not a regimen/line/washout history",
+    "HER2 SNP6 GAIN/NEUTRAL/LOSS is not interchangeable with categorical HER2 status",
+    "Categorical receptor status does not establish assay percentages or trial-specific time windows",
+    "Tumor-size unit not specified in table metadata; not used for a trial threshold"
+  ]
+}

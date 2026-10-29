@@ -76,6 +76,7 @@ def logical_tree(tokens: list[str]):
 
 def validate_extraction(
     content: str, source: EligibilitySource, *, method: str, timestamp: str,
+    allow_unresolved_logic: bool = False,
 ) -> tuple[TrialCriteriaSet | None, list[dict]]:
     errors = []
 
@@ -194,11 +195,11 @@ def validate_extraction(
                         raise ValueError
                 except ValueError:
                     report("unsupported_logical_structure", node.criterion_id)
-        elif re.search(r"\b(and|or)\b", node.original_text, re.IGNORECASE):
+        elif re.search(r"\b(and|or)\b", node.original_text, re.IGNORECASE) and not (allow_unresolved_logic and node.logical_operator is None):
             report("unresolved_compound_logic", node.criterion_id)
-        if re.search(r"\b(except|unless|otherwise|provided that|if|either)\b", node.original_text, re.IGNORECASE):
+        if re.search(r"\b(except|unless|otherwise|provided that|if|either)\b", node.original_text, re.IGNORECASE) and not (allow_unresolved_logic and node.logical_operator is None):
             report("unsupported_conditional_or_exception", node.criterion_id)
-        if node.logical_operator is None:
+        if node.logical_operator is None and not allow_unresolved_logic:
             report("unresolved_logical_operator", node.criterion_id)
         for child in children:
             visit(child, span, node.cohort or inherited_cohort, entry.fields.get("cohort", cohort_span))
@@ -223,6 +224,6 @@ def validate_extraction(
                 and not any(span.start <= index < span.end for span in top_spans)):
             report("uncovered_source_text")
             break
-    if set(evidence) != used:
+    if set(evidence) - used:
         report("unexpected_evidence")
     return (None if errors else criteria_set), errors

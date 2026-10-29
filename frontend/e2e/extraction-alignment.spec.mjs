@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test.skip(!process.env.DROPDOWN_BACKEND, 'Requires isolated offline backend')
@@ -19,7 +20,7 @@ test('real saved extraction review compares source, corrects drafts and preserve
     await route.fulfill({ response })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await page.getByRole('button', { name: 'Protocol annotation', exact: true }).click()
   await expect(page.locator('.clause-card')).toHaveCount(24)
   await page.locator('.clause-card').filter({ hasText: 'Clinically significant GI disorders' }).click()

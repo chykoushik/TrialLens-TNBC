@@ -1,0 +1,25 @@
+{
+  "prior_reference_facts": 48,
+  "categorical_facts": 20,
+  "new_reference_facts": 6,
+  "total_reference_facts": 54,
+  "documents": 18,
+  "patients": 15,
+  "original_predictions": 84,
+  "improved_predictions": 111,
+  "source_aligned_predictions": 111,
+  "document_precision": null,
+  "document_F1": null,
+  "clinical_accuracy": null,
+  "unsupported_clinical_fact_rate": null,
+  "reason_null": "No exhaustive independent document annotation; source alignment is not clinical truth",
+  "methods_implemented": [
+    "existing",
+    "keyword",
+    "semantic_lsa",
+    "hybrid",
+    "reranked",
+    "improved_verified"
+  ],
+  "pretrained_clinical_semantics": false
+}

@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test('fresh public demo is fictional, keyboard usable, responsive and makes no provider requests', async ({ page, request }, info) => {
@@ -12,13 +13,15 @@ test('fresh public demo is fictional, keyboard usable, responsive and makes no p
   await page.goto('/')
   expect(await page.evaluate(() => localStorage.length)).toBe(0)
   await expect(page.getByRole('note')).toContainText('No live AI requests')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Which missing report')
-  await expect(page.getByRole('region', { name: 'An AI proposal must earn its evidence link.' })).toContainText('Full extraction: validation_failed')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Make sense of missing evidence')
   await page.getByRole('link', { name: 'Skip to content' }).focus()
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.locator('#workspace-content')).toBeFocused()
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled()
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
   const radios = page.getByRole('radio')
   await expect(radios.first()).toBeVisible()
   const before = paths.filter(path => path.endsWith('/evaluate')).length
@@ -31,11 +34,11 @@ test('fresh public demo is fictional, keyboard usable, responsive and makes no p
   await expect(page.getByLabel('What changed')).toBeFocused()
   await expect(page.getByLabel('What changed')).toContainText('not an eligibility decision')
   await page.screenshot({ path: info.outputPath('public-demo-desktop.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await expect(page.getByRole('heading', { name: 'An AI proposal must earn its evidence link.' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Protocol annotation', exact: true })).toHaveCount(0)
   await expect(page.getByLabel('Application mode')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Explore Trials', exact: true }).click()
+  await navigate(page, 'Explore Trials')
   await expect(page.getByRole('link', { name: 'Open the NCT01770353 registry study' })).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -43,12 +46,12 @@ test('fresh public demo is fictional, keyboard usable, responsive and makes no p
   await expect(page.getByRole('button', { name: 'Close menu' })).toBeVisible()
   await page.getByRole('button', { name: 'TrialLens home' }).focus()
   await page.keyboard.press('Shift+Tab')
-  await expect(page.getByRole('button', { name: 'Research Tools', exact: true })).toBeFocused()
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Research Results', exact: true })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: 'TrialLens home' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused()
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
+  await navigate(page, 'Home')
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('public-home-mobile.png'), fullPage: true })
   for (const path of ['/api/saved-trials/configuration', '/api/annotations/NCT01770353', '/api/trials', '/.env']) {

@@ -10,7 +10,7 @@ services:
     envVars:
       - key: PORT
         value: "8080"
-      - key: TRIALLENS_LIVE_INFERENCE
+      - key: TRIALLENS_BYOK_ENABLED
         value: "0"
-      - key: NEBIUS_LIVE_EXTRACTION
-        value: "0"
+      - key: TRIALLENS_PUBLIC_RESEARCH
+        value: "1"

@@ -1,3 +1,4 @@
+import { openResearchSection } from './testNavigation'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App from './App'
@@ -180,7 +181,7 @@ test('Trial Explorer connects an NCT selection to the extraction workflow', asyn
     } }
   }))
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: 'Research Tools' }))
+  openResearchSection()
   fireEvent.click(screen.getByRole('button', { name: 'Source fixtures' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Inspect extraction for NCT00000001' }))
   expect(await screen.findByLabelText('Snapshot history')).toBeInTheDocument()
@@ -204,7 +205,7 @@ test('Inspect extraction opens a dedicated NCT02648477 workspace, including repe
       } }
     }))
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Research Tools' }))
+    openResearchSection()
   fireEvent.click(screen.getByRole('button', { name: 'Source fixtures' }))
     const button = await screen.findByRole('button', { name: `Inspect extraction for ${nctId}` })
     fireEvent.click(button)
@@ -270,6 +271,7 @@ test('live extraction requires explicit selection and approval, displays usage a
   fireEvent.change(mode, { target: { value: 'live' } })
   const button = screen.getByRole('button', { name: 'Run one live NVIDIA Nemotron extraction' })
   expect(button).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Operator access code'), { target: { value: 'operator-test-token' } })
   fireEvent.click(screen.getByLabelText('Approve one paid live extraction of this snapshot'))
   fireEvent.click(button)
   expect(await screen.findByText(/Token usage: input 100/)).toBeVisible()
@@ -425,6 +427,7 @@ test('live request failure consumes local approval and does not automatically re
   }))
   renderExtraction()
   fireEvent.change(await screen.findByLabelText('Extraction mode'), { target: { value: 'live' } })
+  fireEvent.change(screen.getByLabelText('Operator access code'), { target: { value: 'operator-test-token' } })
   fireEvent.click(screen.getByLabelText('Approve one paid live extraction of this snapshot'))
   fireEvent.click(screen.getByRole('button', { name: 'Run one live NVIDIA Nemotron extraction' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Request outcome unavailable')

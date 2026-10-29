@@ -1,3 +1,4 @@
+import { openResearchSection } from './testNavigation'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App, { CriterionCard, StateBadge } from './App'
@@ -6,7 +7,7 @@ import type { Assessed, Evaluation, State } from './types'
 const node: Assessed = { criterion_id: 'synthetic-er', criterion: { criterion_id: 'synthetic-er', criterion_type: 'exclusion', original_text: 'SYNTHETIC exclusion condition', source_url: null, cohort: null, logical_operator: 'NONE', biomarker: 'ER', assay: null, temporal_constraint: null }, state: 'unknown', explanation: null, reason_code: 'missing_compatible_evidence', evidence_ids: [], dependencies: [] }
 const evaluation: Evaluation = { patient: { patient_id: 'synthetic-patient', evidence: [] }, assessment: { uncertainty: '1', decisions: [{ trial_id: 'synthetic-trial', decision: 'unresolved', assessment: { context: { as_of: '2026-10-23T12:00:00Z' }, assessments: [node], criteria_set: { source_snapshot: 'synthetic://test' } } }] }, candidates: [{ item_id: 'record', cost: '1', depends_on: [], description: 'Synthetic review', existing_record: { record_id: 'record', reference: 'synthetic://record' }, probability_basis: 'Synthetic assumption', outcomes: [{ outcome_id: 'positive', probability: '1', description: 'Synthetic positive' }] }], assumptions: ['Synthetic assumption'], cost_unit: 'synthetic units', trials: [{ bindings: [{ clinical_attribute: 'ER', criterion: node.criterion }] }], plan: { selected_items: ['record'], spent: '1', expected_reduction: '1', expected_utility: '1', expected_error_bound: '0', risk_weight: '0' }, spent: '0', remaining_budget: '2', plan_scope: 'nonadaptive', next_review: null, reliability: null, dependence_groups: [] }
 
-function renderApp() { render(<App />); fireEvent.click(screen.getByRole('button', { name: 'Research Tools' })) }
+function renderApp() { render(<App />); openResearchSection() }
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith('/health') ? { status: 'ok' } : url.endsWith('/research/cases') ? [{ case_id: 'synthetic-test', trial_count: 1, review_count: 1, budgets: ['1', '2'], unsupported: null }] : url.endsWith('/research/trials') ? { trials: [], warnings: [] } : evaluation })))
@@ -126,11 +127,11 @@ test('overview links navigate without inferring or extracting real eligibility',
   fireEvent.click(screen.getByRole('button', { name: 'Explore trials' }))
   const heading = screen.getByRole('heading', { name: 'Explore Trials', level: 1 })
   expect(heading).toHaveFocus()
-  expect(screen.getByRole('button', { name: 'Explore Trials' })).toHaveAttribute('aria-current', 'page')
+  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Research Results' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current')
   expect(document.title).toBe('Explore Trials | TrialLens-TNBC')
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/extractions'))).toBe(false)
-  fireEvent.click(screen.getByRole('button', { name: 'Research Tools' }))
+  openResearchSection()
   fireEvent.click(screen.getByRole('button', { name: 'Patient evidence' }))
   expect(screen.getByRole('heading', { name: 'Research Tools', level: 1 })).toHaveFocus()
 })
@@ -145,7 +146,7 @@ test('mobile navigation manages focus, traps tab and closes with Escape', async 
   const brand = screen.getByRole('button', { name: 'TrialLens home' })
   expect(brand).toHaveFocus()
   fireEvent.keyDown(brand, { key: 'Tab', shiftKey: true })
-  expect(screen.getByRole('button', { name: 'Research Tools' })).toHaveFocus()
+  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Research Results' })).toHaveFocus()
   fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
   expect(brand).toHaveFocus()
   fireEvent.keyDown(document, { key: 'Escape' })
@@ -200,7 +201,7 @@ test('skip link activation transfers focus to content and does not remain focuse
   fireEvent.click(skip)
   expect(document.getElementById('workspace-content')).toHaveFocus()
   expect(skip).not.toHaveFocus()
-  fireEvent.click(screen.getByRole('button', { name: 'Explore Trials' }))
+  openResearchSection('Browse saved trials')
   expect(screen.getByRole('heading', { name: 'Explore Trials', level: 1 })).toHaveFocus()
   expect(skip).not.toHaveFocus()
 })

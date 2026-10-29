@@ -17,6 +17,8 @@ NCT_ID = "NCT00000001"
 
 @pytest.fixture
 def storage(monkeypatch):
+    monkeypatch.setenv("TRIALLENS_OPERATOR_TOKEN", "operator-test-token-0123456789abcdef")
+    monkeypatch.setenv("NEBIUS_MAX_REQUEST_USD", "1")
     with TemporaryDirectory(dir=ROOT / "data/raw/trials") as temporary:
         root = Path(temporary)
         for name, timestamp in (("z_old", "2026-10-20T12:00:00Z"), ("a_latest", "2026-10-23T12:00:00Z")):
@@ -37,7 +39,7 @@ def source(snapshot=None):
 
 
 def run(**body):
-    return client.post(f"/saved-trials/{NCT_ID}/extractions", json=body)
+    return client.post(f"/saved-trials/{NCT_ID}/extractions", json=body, headers={"Authorization": "Bearer operator-test-token-0123456789abcdef"} if body.get("mode") == "live" else {})
 
 
 def test_latest_dedup_uses_retrieval_timestamp_not_directory_order(storage):
@@ -237,7 +239,7 @@ def test_live_http_integration(storage, monkeypatch, case, expected):
         assert result["validation_errors"] == [{"code": "authentication_error"}]
     assert (storage / "a_latest/response.json").read_bytes() == before
     blocked = run(mode="live", live_approved=True, snapshot="a_latest/response.json", snapshot_sha256=selected["sha256"]).json()
-    assert blocked["manifest"]["request_count"] == 0
+    assert "unavailable" in blocked["detail"]
     assert len(calls) == 1
     if case == "timeout":
         assert (storage / "live.claim").read_bytes() == claim_bytes
@@ -250,12 +252,14 @@ def test_safe_configuration_and_live_opt_in(storage, monkeypatch):
     monkeypatch.setenv("NEBIUS_BASE_URL", nebius.BASE_URL)
     monkeypatch.delenv("NEBIUS_LIVE_EXTRACTION", raising=False)
     monkeypatch.setattr(nebius, "LIVE_CLAIM", storage / "live.claim")
-    result = client.get("/saved-trials/configuration")
+    monkeypatch.setenv("TRIALLENS_OPERATOR_TOKEN", "software-test-operator-0123456789abcdef")
+    result = client.get("/saved-trials/configuration", headers={"Authorization": "Bearer software-test-operator-0123456789abcdef"})
     assert result.json()["configured"] is True
     assert result.json()["ready"] is False
     assert "synthetic-private-secret" not in result.text
+    monkeypatch.delenv("TRIALLENS_OPERATOR_TOKEN")
     selected = source().json()["source"]
     assert run(mode="live", snapshot="a_latest/response.json", snapshot_sha256=selected["sha256"]).status_code == 422
     blocked = run(mode="live", live_approved=True, snapshot="a_latest/response.json", snapshot_sha256=selected["sha256"]).json()
-    assert blocked["manifest"]["request_count"] == 0
+    assert blocked["detail"] == "Operator access is not configured."
     assert not nebius.LIVE_CLAIM.exists()

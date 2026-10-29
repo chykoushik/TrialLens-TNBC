@@ -1,0 +1,11 @@
+{
+  "retrieved_at": "2026-10-23T20:30:36.640519+00:00",
+  "source_url": "https://clinicaltrials.gov/api/v2/studies?query.cond=triple-negative+breast+cancer&pageSize=5&format=json",
+  "nct_ids": [
+    "NCT02648477",
+    "NCT04691375",
+    "NCT03538028",
+    "NCT01770353",
+    "NCT04331067"
+  ]
+}

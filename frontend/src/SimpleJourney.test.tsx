@@ -1,3 +1,4 @@
+import { openDemo } from './testNavigation'
 ﻿import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App from './App'
@@ -15,9 +16,11 @@ beforeEach(() => {
   }))
 })
 
-test('three-action first visit stages without recalculation and applies a real before/after summary', async () => {
+test('guided first visit stages without recalculation and applies a real before/after summary', async () => {
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: 'Try the demo' }))
+  openDemo()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
+  for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   const radios = await screen.findAllByRole('radio')
   expect(screen.queryByLabelText('Total review budget')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Application mode')).not.toBeInTheDocument()
@@ -40,7 +43,9 @@ test('failed Apply retains the selection and commits no success message', async 
   const original = vi.mocked(fetch).getMockImplementation()!
   vi.mocked(fetch).mockImplementation(async (...args) => args[1]?.body && Object.keys(JSON.parse(String(args[1].body)).outcomes ?? {}).length ? { ok: false, status: 503, json: async () => ({ detail: 'Software failure' }) } as Response : original(...args))
   render(<App />)
-  fireEvent.click(screen.getByRole('button', { name: 'Try the demo' }))
+  openDemo()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled())
+  for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click((await screen.findAllByRole('radio'))[0])
   fireEvent.click(screen.getByRole('button', { name: 'Apply fictional report' }))
   await screen.findByText(/Review not applied. Draft retained/)

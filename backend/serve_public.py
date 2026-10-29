@@ -8,11 +8,12 @@ def settings():
     if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 65535:
         raise ValueError("Invalid public port")
     return {"host": "0.0.0.0", "port": int(value), "workers": 1,
-            "limit_concurrency": 16, "timeout_keep_alive": 5, "access_log": False}
+            "limit_concurrency": 16, "timeout_keep_alive": 5, "access_log": False,
+            "proxy_headers": False, "server_header": False}
 
 
 def main():
-    uvicorn.run("backend.public_demo:app", **settings())
+    uvicorn.run("backend.research_public:app", **settings())
 
 
 if __name__ == "__main__":

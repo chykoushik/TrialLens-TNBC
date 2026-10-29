@@ -65,6 +65,133 @@ def run(snapshot, source, **kwargs):
     return output, json.loads((output / 'manifest.json').read_text())
 
 
+@pytest.fixture
+def fresh_source(setup, monkeypatch):
+    root, _, _, prior, calls, _ = setup
+    monkeypatch.setenv('NEBIUS_INPUT_USD_PER_MILLION', '0.30')
+    monkeypatch.setenv('NEBIUS_OUTPUT_USD_PER_MILLION', '0.90')
+    monkeypatch.setenv('NEBIUS_MAX_REQUEST_USD', '0.05')
+    snapshot = root / 'target' / 'response.json'
+    snapshot.parent.mkdir()
+    value = json.loads((FIXTURES / 'extraction_snapshot.json').read_text())
+    value['studies'][0]['protocolSection']['identificationModule']['nctId'] = 'NCT00000002'
+    snapshot.write_text(json.dumps(value), encoding='utf-8')
+    source = load_source(snapshot, 'NCT00000002')
+    return root, snapshot, source, prior, calls
+
+
+def test_new_source_quote_is_exact_and_non_consuming(fresh_source, capsys):
+    _, snapshot, source, _, calls = fresh_source
+    assert authorization.main(['--quote-source', '--nct-id', source.nct_id, '--snapshot', str(snapshot.relative_to(ROOT))]) == 0
+    value = json.loads(capsys.readouterr().out)
+    assert value['quote']['maximum_estimated_cost_usd'] == '0.0145728'
+    assert value['authorization_created'] is False and value['request_consumed'] is False
+    assert not authorization.AUTHORIZATIONS.exists() and not calls
+
+
+@pytest.mark.parametrize('cap', ['0.001', '0.06', 'NaN', 'Infinity', '-1'])
+def test_invalid_or_excess_cost_never_creates_grant(fresh_source, cap):
+    _, _, source, prior, calls = fresh_source
+    with pytest.raises(nebius.NebiusError, match='authorization_cost_limit'):
+        authorization.authorize_source(prior, source, cap, 'software-operator', 'Mock authorization test')
+    assert not authorization.AUTHORIZATIONS.exists() and not calls
+
+
+@pytest.mark.parametrize('timeout', [False, True])
+def test_fresh_source_grant_preserves_history_and_is_exactly_one_request(fresh_source, setup, timeout):
+    setup[-1](timeout)
+    _, snapshot, source, prior, calls = fresh_source
+    identifier = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'Explicit mock source grant')
+    record = authorization.read_authorization(identifier)
+    assert record['version'] == 3 and record['request_id'] == identifier
+    assert record['nct_id'] == 'NCT00000002' and record['audit_anchor']['nct_id'] == 'NCT00000001'
+    assert record['max_requests'] == 1 and record['automatic_retries'] == 0
+    assert record['authorized_maximum_estimated_cost_usd'] == '0.0145728'
+    assert record['audit_anchor']['original_claim_sha256'] == authorization.checksum(nebius.LIVE_CLAIM)
+    assert not calls
+    _, result = run(snapshot, source, authorization_id=identifier)
+    assert result['request_count'] == 1 and result['request_id'] == identifier
+    assert result['status'] == ('failed' if timeout else 'validated')
+    _, blocked = run(snapshot, source, authorization_id=identifier)
+    assert blocked['request_count'] == 0 and len(calls) == 1
+
+
+@pytest.mark.parametrize('setting,value', [('NEBIUS_INPUT_USD_PER_MILLION', '0.4'), ('NEBIUS_BASE_URL', nebius.REGIONAL_BASE_URL), ('NEBIUS_MAX_REQUEST_USD', '0.001')])
+def test_changed_price_endpoint_or_server_cap_blocks_before_claim(fresh_source, monkeypatch, setting, value):
+    _, snapshot, source, prior, calls = fresh_source
+    identifier = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'Explicit mock source grant')
+    monkeypatch.setenv(setting, value)
+    _, result = run(snapshot, source, authorization_id=identifier)
+    assert result['request_count'] == 0 and not calls
+    assert not (authorization.AUTHORIZATIONS / f'{identifier}.claim').exists()
+
+
+def test_new_source_authorization_is_atomic_under_concurrency(fresh_source):
+    _, _, source, prior, calls = fresh_source
+    identifier = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'Concurrent mock grant')
+    config = nebius.NebiusConfig.from_environment()
+    def reserve(_):
+        try:
+            authorization.reserve_authorized_request(identifier, source, config, ROOT / 'cache/mock-request-output')
+            return True
+        except nebius.NebiusError:
+            return False
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        assert sum(executor.map(reserve, range(8))) == 1
+    assert not calls
+
+
+def test_multiple_source_grants_never_automatically_fall_back(fresh_source, monkeypatch):
+    from backend.app.inference_access import scoped_authorization
+    _, snapshot, source, prior, calls = fresh_source
+    first = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'Mock allocation one')
+    second = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'Mock allocation two')
+    assert first != second
+    monkeypatch.setenv('NEBIUS_EXTRACTION_AUTHORIZATION_ID', first)
+    assert scoped_authorization(source) == first
+    output, result = run(snapshot, source, authorization_id=first)
+    assert result['request_count'] == 1
+    authorization.inspect_attempt(output / 'manifest.json')
+    assert scoped_authorization(source) is None
+    assert not (authorization.AUTHORIZATIONS / f'{second}.claim').exists()
+    monkeypatch.setenv('NEBIUS_EXTRACTION_AUTHORIZATION_ID', second)
+    assert scoped_authorization(source) == second and len(calls) == 1
+
+
+def test_http_requires_matching_request_id_and_explicit_cost_confirmation(fresh_source, monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    from backend.app import research_api
+    root, _, source, prior, calls = fresh_source
+    monkeypatch.setattr(research_api, 'RAW_TRIALS_DIR', root)
+    token = 'test-operator-access-code-0123456789abcdef'
+    monkeypatch.setenv('TRIALLENS_OPERATOR_TOKEN', token)
+    identifier = authorization.authorize_source(prior, source, '0.0145728', 'software-operator', 'HTTP mock grant')
+    monkeypatch.setenv('NEBIUS_EXTRACTION_AUTHORIZATION_ID', identifier)
+    client = TestClient(app)
+    endpoint = f'/saved-trials/{source.nct_id}/extractions'
+    headers = {'Authorization': f'Bearer {token}'}
+    payload = {'snapshot': 'target/response.json', 'snapshot_sha256': source.sha256, 'mode': 'live', 'live_approved': True}
+    assert client.post(endpoint, json=payload).status_code == 401
+    assert client.post(endpoint, json=payload, headers=headers).status_code == 422
+    payload['authorization_id'] = 'f' * 32
+    payload['maximum_estimated_cost_usd'] = '0.0145728'
+    assert client.post(endpoint, json=payload, headers=headers).status_code == 409
+    payload['authorization_id'] = identifier
+    payload['maximum_estimated_cost_usd'] = '0.02'
+    assert client.post(endpoint, json=payload, headers=headers).status_code == 422
+    assert not calls
+    state = client.get(f'/saved-trials/{source.nct_id}/inference?snapshot=target/response.json', headers=headers).json()['configuration']
+    assert state['remaining_authorized_requests'] == 1 and state['authorization_id'] == identifier
+    payload['maximum_estimated_cost_usd'] = '0.0145728'
+    result = client.post(endpoint, json=payload, headers=headers).json()
+    assert result['manifest']['request_count'] == 1 and len(calls) == 1
+    assert client.post(endpoint, json=payload, headers=headers).status_code == 409
+    assert len(calls) == 1
+    state = client.get(f'/saved-trials/{source.nct_id}/inference?snapshot=target/response.json', headers=headers).json()['configuration']
+    assert state['remaining_authorized_requests'] == 0 and not state['ready']
+
+
 def test_unauthorized_second_request_and_check_are_non_consuming(setup, capsys):
     root, snapshot, source, prior, calls, _ = setup
     assert authorization.main(['--previous-attempt', str(prior.relative_to(ROOT))]) == 0

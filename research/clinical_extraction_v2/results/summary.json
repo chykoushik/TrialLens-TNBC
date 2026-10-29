@@ -1,0 +1,14 @@
+{
+  "documents": 26,
+  "patients": 23,
+  "categorical_reference_facts": 35,
+  "legacy_primary_facts": 20,
+  "expanded_total_factual_inventory": 113,
+  "new_reference_facts": 59,
+  "source_alignment_checked": 1586,
+  "clinical_accuracy": null,
+  "whole_document_F1": null,
+  "independent_clinician_labels": 0,
+  "new_sequential_cohort": false,
+  "confidence": "Rule scores are not probabilities; intervals descriptive, no multiplicity-unadjusted confirmatory tests"
+}

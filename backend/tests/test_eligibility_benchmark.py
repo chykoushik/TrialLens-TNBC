@@ -75,7 +75,10 @@ def test_five_genuine_studies_deduplicated_and_reproducible(workspace):
     manifest = benchmark.read_json(first / "manifest.json")
     assert [entry["nct_id"] for entry in manifest["trials"]] == list(benchmark.TRIAL_IDS)
     for entry in manifest["trials"]:
-        assert len(entry["historical_snapshots"]) == 2
+        available = [path for path in raw_files if path.name == 'response.json' and any(
+            study.get('protocolSection', {}).get('identificationModule', {}).get('nctId') == entry['nct_id']
+            for study in benchmark.read_json(path).get('studies', []))]
+        assert len(entry["historical_snapshots"]) == len(available) > 0
         source, annotation, _ = benchmark.load_trial(first, entry)
         assert source.is_synthetic is not True
         assert annotation.criteria == []

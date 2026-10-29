@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test.skip(!process.env.DROPDOWN_BACKEND, 'Requires isolated local annotation backend')
@@ -14,7 +15,7 @@ test('review ECOG and another clause, undo, save a draft, and inspect provenance
     await route.fulfill({ response })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await page.getByRole('button', { name: 'Protocol annotation', exact: true }).click()
   await expect(page.locator('.clause-card').first()).toBeVisible()
   await expect(page.getByLabel('Span start')).not.toBeVisible()

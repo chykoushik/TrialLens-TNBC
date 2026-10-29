@@ -1,0 +1,1032 @@
+{
+  "annotation_version": "eligibility-reference-v1",
+  "assessment_allowed": false,
+  "counts": {
+    "assay_correct": 0,
+    "assay_evaluated": 0,
+    "assay_missing_prediction": 0,
+    "biomarker_correct": 0,
+    "biomarker_evaluated": 0,
+    "biomarker_missing_prediction": 0,
+    "cohort_correct": 0,
+    "cohort_evaluated": 0,
+    "cohort_missing_prediction": 0,
+    "detection_trials": 0,
+    "exceptions_correct": 0,
+    "exceptions_evaluated": 0,
+    "exceptions_missing_prediction": 0,
+    "fn": 0,
+    "fp": 0,
+    "logic_correct": 0,
+    "logic_evaluated": 0,
+    "logic_missing_prediction": 0,
+    "missing_prediction": 5,
+    "polarity_correct": 0,
+    "polarity_evaluated": 0,
+    "polarity_missing_prediction": 0,
+    "prediction_error": 0,
+    "reference_error": 0,
+    "reference_unsupported": 0,
+    "reference_unsupported_evaluated": 0,
+    "reviewed_boundaries": 0,
+    "reviewed_slots": 0,
+    "span_evaluated": 0,
+    "span_valid": 0,
+    "temporal_constraint_correct": 0,
+    "temporal_constraint_evaluated": 0,
+    "temporal_constraint_missing_prediction": 0,
+    "threshold_operator_correct": 0,
+    "threshold_operator_evaluated": 0,
+    "threshold_operator_missing_prediction": 0,
+    "threshold_value_correct": 0,
+    "threshold_value_evaluated": 0,
+    "threshold_value_missing_prediction": 0,
+    "tp": 0,
+    "trials": 5,
+    "unit_correct": 0,
+    "unit_evaluated": 0,
+    "unit_missing_prediction": 0,
+    "unmatched_reviewed_criteria": 0,
+    "unreviewed_boundaries": 0,
+    "unreviewed_inventory": 5,
+    "unreviewed_slots": 0,
+    "unsupported_evaluated": 0,
+    "unsupported_predictions": 0,
+    "unsupported_semantics_correct": 0,
+    "unsupported_semantics_evaluated": 0,
+    "unsupported_semantics_missing_prediction": 0,
+    "validation_evaluated": 0,
+    "validation_passed": 0
+  },
+  "dataset_version": "tnbc-eligibility-v1",
+  "errors": [
+    {
+      "code": "missing_prediction",
+      "nct_id": "NCT01770353"
+    },
+    {
+      "code": "missing_prediction",
+      "nct_id": "NCT02648477"
+    },
+    {
+      "code": "missing_prediction",
+      "nct_id": "NCT03538028"
+    },
+    {
+      "code": "missing_prediction",
+      "nct_id": "NCT04331067"
+    },
+    {
+      "code": "missing_prediction",
+      "nct_id": "NCT04691375"
+    }
+  ],
+  "manifest_sha256": "0165f6d65a13acea6764565a5e3534598985b3ec676970465cabcf2c8c7bd3da",
+  "metrics": {
+    "criterion_detection_f1": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "criterion_detection_precision": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "criterion_detection_recall": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "polarity_accuracy": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "reference_unsupported_rate": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "slots": {
+      "assay": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "biomarker": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "cohort": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "exceptions": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "logic": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "polarity": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "temporal_constraint": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "threshold_operator": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "threshold_value": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "unit": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      },
+      "unsupported_semantics": {
+        "denominator": 0,
+        "numerator": 0,
+        "value": null
+      }
+    },
+    "source_span_validity": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "unsupported_rate": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    },
+    "validation_pass_rate": {
+      "denominator": 0,
+      "numerator": 0,
+      "value": null
+    }
+  },
+  "software_test_only": false,
+  "trials": [
+    {
+      "counts": {
+        "assay_correct": 0,
+        "assay_evaluated": 0,
+        "assay_missing_prediction": 0,
+        "biomarker_correct": 0,
+        "biomarker_evaluated": 0,
+        "biomarker_missing_prediction": 0,
+        "cohort_correct": 0,
+        "cohort_evaluated": 0,
+        "cohort_missing_prediction": 0,
+        "detection_trials": 0,
+        "exceptions_correct": 0,
+        "exceptions_evaluated": 0,
+        "exceptions_missing_prediction": 0,
+        "fn": 0,
+        "fp": 0,
+        "logic_correct": 0,
+        "logic_evaluated": 0,
+        "logic_missing_prediction": 0,
+        "missing_prediction": 1,
+        "polarity_correct": 0,
+        "polarity_evaluated": 0,
+        "polarity_missing_prediction": 0,
+        "prediction_error": 0,
+        "reference_error": 0,
+        "reference_unsupported": 0,
+        "reference_unsupported_evaluated": 0,
+        "reviewed_boundaries": 0,
+        "reviewed_slots": 0,
+        "span_evaluated": 0,
+        "span_valid": 0,
+        "temporal_constraint_correct": 0,
+        "temporal_constraint_evaluated": 0,
+        "temporal_constraint_missing_prediction": 0,
+        "threshold_operator_correct": 0,
+        "threshold_operator_evaluated": 0,
+        "threshold_operator_missing_prediction": 0,
+        "threshold_value_correct": 0,
+        "threshold_value_evaluated": 0,
+        "threshold_value_missing_prediction": 0,
+        "tp": 0,
+        "trials": 1,
+        "unit_correct": 0,
+        "unit_evaluated": 0,
+        "unit_missing_prediction": 0,
+        "unmatched_reviewed_criteria": 0,
+        "unreviewed_boundaries": 0,
+        "unreviewed_inventory": 1,
+        "unreviewed_slots": 0,
+        "unsupported_evaluated": 0,
+        "unsupported_predictions": 0,
+        "unsupported_semantics_correct": 0,
+        "unsupported_semantics_evaluated": 0,
+        "unsupported_semantics_missing_prediction": 0,
+        "validation_evaluated": 0,
+        "validation_passed": 0
+      },
+      "errors": [
+        {
+          "code": "missing_prediction"
+        }
+      ],
+      "metrics": {
+        "criterion_detection_f1": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "polarity_accuracy": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "reference_unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "slots": {
+          "assay": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "biomarker": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "cohort": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "exceptions": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "logic": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "polarity": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "temporal_constraint": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_operator": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_value": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unit": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unsupported_semantics": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          }
+        },
+        "source_span_validity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "validation_pass_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        }
+      },
+      "nct_id": "NCT01770353",
+      "prediction": null,
+      "reference_sha256": "a07b4d1b1ae443a00bdef6279030810ecd6755f36483881a8c68ee9f22b68c6d",
+      "snapshot_sha256": "97584332c0329bca765d3d320e4d06ecce5711ac785603345c0402571add2060",
+      "source_snapshot": "data/raw/trials/20261023T203036640519Z_8ee2f270a09a4c6c86a684bd69e5cfb7/response.json",
+      "source_url": "https://clinicaltrials.gov/study/NCT01770353"
+    },
+    {
+      "counts": {
+        "assay_correct": 0,
+        "assay_evaluated": 0,
+        "assay_missing_prediction": 0,
+        "biomarker_correct": 0,
+        "biomarker_evaluated": 0,
+        "biomarker_missing_prediction": 0,
+        "cohort_correct": 0,
+        "cohort_evaluated": 0,
+        "cohort_missing_prediction": 0,
+        "detection_trials": 0,
+        "exceptions_correct": 0,
+        "exceptions_evaluated": 0,
+        "exceptions_missing_prediction": 0,
+        "fn": 0,
+        "fp": 0,
+        "logic_correct": 0,
+        "logic_evaluated": 0,
+        "logic_missing_prediction": 0,
+        "missing_prediction": 1,
+        "polarity_correct": 0,
+        "polarity_evaluated": 0,
+        "polarity_missing_prediction": 0,
+        "prediction_error": 0,
+        "reference_error": 0,
+        "reference_unsupported": 0,
+        "reference_unsupported_evaluated": 0,
+        "reviewed_boundaries": 0,
+        "reviewed_slots": 0,
+        "span_evaluated": 0,
+        "span_valid": 0,
+        "temporal_constraint_correct": 0,
+        "temporal_constraint_evaluated": 0,
+        "temporal_constraint_missing_prediction": 0,
+        "threshold_operator_correct": 0,
+        "threshold_operator_evaluated": 0,
+        "threshold_operator_missing_prediction": 0,
+        "threshold_value_correct": 0,
+        "threshold_value_evaluated": 0,
+        "threshold_value_missing_prediction": 0,
+        "tp": 0,
+        "trials": 1,
+        "unit_correct": 0,
+        "unit_evaluated": 0,
+        "unit_missing_prediction": 0,
+        "unmatched_reviewed_criteria": 0,
+        "unreviewed_boundaries": 0,
+        "unreviewed_inventory": 1,
+        "unreviewed_slots": 0,
+        "unsupported_evaluated": 0,
+        "unsupported_predictions": 0,
+        "unsupported_semantics_correct": 0,
+        "unsupported_semantics_evaluated": 0,
+        "unsupported_semantics_missing_prediction": 0,
+        "validation_evaluated": 0,
+        "validation_passed": 0
+      },
+      "errors": [
+        {
+          "code": "missing_prediction"
+        }
+      ],
+      "metrics": {
+        "criterion_detection_f1": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "polarity_accuracy": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "reference_unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "slots": {
+          "assay": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "biomarker": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "cohort": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "exceptions": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "logic": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "polarity": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "temporal_constraint": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_operator": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_value": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unit": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unsupported_semantics": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          }
+        },
+        "source_span_validity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "validation_pass_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        }
+      },
+      "nct_id": "NCT02648477",
+      "prediction": null,
+      "reference_sha256": "baebfa19c25f2f7d89f26a315f847d94cdc1d762691f700a8a60b703d1ddcd85",
+      "snapshot_sha256": "97584332c0329bca765d3d320e4d06ecce5711ac785603345c0402571add2060",
+      "source_snapshot": "data/raw/trials/20261023T203036640519Z_8ee2f270a09a4c6c86a684bd69e5cfb7/response.json",
+      "source_url": "https://clinicaltrials.gov/study/NCT02648477"
+    },
+    {
+      "counts": {
+        "assay_correct": 0,
+        "assay_evaluated": 0,
+        "assay_missing_prediction": 0,
+        "biomarker_correct": 0,
+        "biomarker_evaluated": 0,
+        "biomarker_missing_prediction": 0,
+        "cohort_correct": 0,
+        "cohort_evaluated": 0,
+        "cohort_missing_prediction": 0,
+        "detection_trials": 0,
+        "exceptions_correct": 0,
+        "exceptions_evaluated": 0,
+        "exceptions_missing_prediction": 0,
+        "fn": 0,
+        "fp": 0,
+        "logic_correct": 0,
+        "logic_evaluated": 0,
+        "logic_missing_prediction": 0,
+        "missing_prediction": 1,
+        "polarity_correct": 0,
+        "polarity_evaluated": 0,
+        "polarity_missing_prediction": 0,
+        "prediction_error": 0,
+        "reference_error": 0,
+        "reference_unsupported": 0,
+        "reference_unsupported_evaluated": 0,
+        "reviewed_boundaries": 0,
+        "reviewed_slots": 0,
+        "span_evaluated": 0,
+        "span_valid": 0,
+        "temporal_constraint_correct": 0,
+        "temporal_constraint_evaluated": 0,
+        "temporal_constraint_missing_prediction": 0,
+        "threshold_operator_correct": 0,
+        "threshold_operator_evaluated": 0,
+        "threshold_operator_missing_prediction": 0,
+        "threshold_value_correct": 0,
+        "threshold_value_evaluated": 0,
+        "threshold_value_missing_prediction": 0,
+        "tp": 0,
+        "trials": 1,
+        "unit_correct": 0,
+        "unit_evaluated": 0,
+        "unit_missing_prediction": 0,
+        "unmatched_reviewed_criteria": 0,
+        "unreviewed_boundaries": 0,
+        "unreviewed_inventory": 1,
+        "unreviewed_slots": 0,
+        "unsupported_evaluated": 0,
+        "unsupported_predictions": 0,
+        "unsupported_semantics_correct": 0,
+        "unsupported_semantics_evaluated": 0,
+        "unsupported_semantics_missing_prediction": 0,
+        "validation_evaluated": 0,
+        "validation_passed": 0
+      },
+      "errors": [
+        {
+          "code": "missing_prediction"
+        }
+      ],
+      "metrics": {
+        "criterion_detection_f1": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "polarity_accuracy": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "reference_unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "slots": {
+          "assay": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "biomarker": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "cohort": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "exceptions": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "logic": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "polarity": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "temporal_constraint": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_operator": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_value": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unit": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unsupported_semantics": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          }
+        },
+        "source_span_validity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "validation_pass_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        }
+      },
+      "nct_id": "NCT03538028",
+      "prediction": null,
+      "reference_sha256": "f59414ea631efd7020a59dbef8629ade40948cb8fd3712a5b7caa9d9fc8a80e1",
+      "snapshot_sha256": "97584332c0329bca765d3d320e4d06ecce5711ac785603345c0402571add2060",
+      "source_snapshot": "data/raw/trials/20261023T203036640519Z_8ee2f270a09a4c6c86a684bd69e5cfb7/response.json",
+      "source_url": "https://clinicaltrials.gov/study/NCT03538028"
+    },
+    {
+      "counts": {
+        "assay_correct": 0,
+        "assay_evaluated": 0,
+        "assay_missing_prediction": 0,
+        "biomarker_correct": 0,
+        "biomarker_evaluated": 0,
+        "biomarker_missing_prediction": 0,
+        "cohort_correct": 0,
+        "cohort_evaluated": 0,
+        "cohort_missing_prediction": 0,
+        "detection_trials": 0,
+        "exceptions_correct": 0,
+        "exceptions_evaluated": 0,
+        "exceptions_missing_prediction": 0,
+        "fn": 0,
+        "fp": 0,
+        "logic_correct": 0,
+        "logic_evaluated": 0,
+        "logic_missing_prediction": 0,
+        "missing_prediction": 1,
+        "polarity_correct": 0,
+        "polarity_evaluated": 0,
+        "polarity_missing_prediction": 0,
+        "prediction_error": 0,
+        "reference_error": 0,
+        "reference_unsupported": 0,
+        "reference_unsupported_evaluated": 0,
+        "reviewed_boundaries": 0,
+        "reviewed_slots": 0,
+        "span_evaluated": 0,
+        "span_valid": 0,
+        "temporal_constraint_correct": 0,
+        "temporal_constraint_evaluated": 0,
+        "temporal_constraint_missing_prediction": 0,
+        "threshold_operator_correct": 0,
+        "threshold_operator_evaluated": 0,
+        "threshold_operator_missing_prediction": 0,
+        "threshold_value_correct": 0,
+        "threshold_value_evaluated": 0,
+        "threshold_value_missing_prediction": 0,
+        "tp": 0,
+        "trials": 1,
+        "unit_correct": 0,
+        "unit_evaluated": 0,
+        "unit_missing_prediction": 0,
+        "unmatched_reviewed_criteria": 0,
+        "unreviewed_boundaries": 0,
+        "unreviewed_inventory": 1,
+        "unreviewed_slots": 0,
+        "unsupported_evaluated": 0,
+        "unsupported_predictions": 0,
+        "unsupported_semantics_correct": 0,
+        "unsupported_semantics_evaluated": 0,
+        "unsupported_semantics_missing_prediction": 0,
+        "validation_evaluated": 0,
+        "validation_passed": 0
+      },
+      "errors": [
+        {
+          "code": "missing_prediction"
+        }
+      ],
+      "metrics": {
+        "criterion_detection_f1": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "polarity_accuracy": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "reference_unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "slots": {
+          "assay": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "biomarker": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "cohort": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "exceptions": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "logic": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "polarity": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "temporal_constraint": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_operator": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_value": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unit": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unsupported_semantics": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          }
+        },
+        "source_span_validity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "validation_pass_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        }
+      },
+      "nct_id": "NCT04331067",
+      "prediction": null,
+      "reference_sha256": "f82305a9ca076a5d9084946ef74ffa9994d0a6b1e32b5d67985c38cb8241eec8",
+      "snapshot_sha256": "97584332c0329bca765d3d320e4d06ecce5711ac785603345c0402571add2060",
+      "source_snapshot": "data/raw/trials/20261023T203036640519Z_8ee2f270a09a4c6c86a684bd69e5cfb7/response.json",
+      "source_url": "https://clinicaltrials.gov/study/NCT04331067"
+    },
+    {
+      "counts": {
+        "assay_correct": 0,
+        "assay_evaluated": 0,
+        "assay_missing_prediction": 0,
+        "biomarker_correct": 0,
+        "biomarker_evaluated": 0,
+        "biomarker_missing_prediction": 0,
+        "cohort_correct": 0,
+        "cohort_evaluated": 0,
+        "cohort_missing_prediction": 0,
+        "detection_trials": 0,
+        "exceptions_correct": 0,
+        "exceptions_evaluated": 0,
+        "exceptions_missing_prediction": 0,
+        "fn": 0,
+        "fp": 0,
+        "logic_correct": 0,
+        "logic_evaluated": 0,
+        "logic_missing_prediction": 0,
+        "missing_prediction": 1,
+        "polarity_correct": 0,
+        "polarity_evaluated": 0,
+        "polarity_missing_prediction": 0,
+        "prediction_error": 0,
+        "reference_error": 0,
+        "reference_unsupported": 0,
+        "reference_unsupported_evaluated": 0,
+        "reviewed_boundaries": 0,
+        "reviewed_slots": 0,
+        "span_evaluated": 0,
+        "span_valid": 0,
+        "temporal_constraint_correct": 0,
+        "temporal_constraint_evaluated": 0,
+        "temporal_constraint_missing_prediction": 0,
+        "threshold_operator_correct": 0,
+        "threshold_operator_evaluated": 0,
+        "threshold_operator_missing_prediction": 0,
+        "threshold_value_correct": 0,
+        "threshold_value_evaluated": 0,
+        "threshold_value_missing_prediction": 0,
+        "tp": 0,
+        "trials": 1,
+        "unit_correct": 0,
+        "unit_evaluated": 0,
+        "unit_missing_prediction": 0,
+        "unmatched_reviewed_criteria": 0,
+        "unreviewed_boundaries": 0,
+        "unreviewed_inventory": 1,
+        "unreviewed_slots": 0,
+        "unsupported_evaluated": 0,
+        "unsupported_predictions": 0,
+        "unsupported_semantics_correct": 0,
+        "unsupported_semantics_evaluated": 0,
+        "unsupported_semantics_missing_prediction": 0,
+        "validation_evaluated": 0,
+        "validation_passed": 0
+      },
+      "errors": [
+        {
+          "code": "missing_prediction"
+        }
+      ],
+      "metrics": {
+        "criterion_detection_f1": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_precision": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "criterion_detection_recall": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "polarity_accuracy": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "reference_unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "slots": {
+          "assay": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "biomarker": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "cohort": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "exceptions": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "logic": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "polarity": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "temporal_constraint": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_operator": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "threshold_value": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unit": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          },
+          "unsupported_semantics": {
+            "denominator": 0,
+            "numerator": 0,
+            "value": null
+          }
+        },
+        "source_span_validity": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "unsupported_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "validation_pass_rate": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        }
+      },
+      "nct_id": "NCT04691375",
+      "prediction": null,
+      "reference_sha256": "88aaf5fd006984d064f7d8fbb3762ee00f4eed0988480bfbba1a201d90186bec",
+      "snapshot_sha256": "97584332c0329bca765d3d320e4d06ecce5711ac785603345c0402571add2060",
+      "source_snapshot": "data/raw/trials/20261023T203036640519Z_8ee2f270a09a4c6c86a684bd69e5cfb7/response.json",
+      "source_url": "https://clinicaltrials.gov/study/NCT04691375"
+    }
+  ]
+}

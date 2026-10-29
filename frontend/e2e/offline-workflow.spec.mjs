@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test.skip(!process.env.DROPDOWN_BACKEND, 'Requires the real local offline backend')
@@ -29,7 +30,7 @@ async function setup(page) {
     const evaluation = /^\/(tnbc|research)\/cases\/[^/]+\/evaluate$/.test(path)
     const mock = /^\/saved-trials\/NCT\d{8}\/extractions$/.test(path) && body?.mode === 'mock' && !body.live_approved
     const read = request.method() === 'GET' && (/^\/(health|(tnbc|research)\/cases|research\/trials)$/.test(path) || /^\/saved-trials\/NCT\d{8}$/.test(path))
-    expect(read || (request.method() === 'POST' && (evaluation || mock)), `Offline allowlist: ${path}`).toBe(true)
+    expect(read || path === '/research/results' || (request.method() === 'POST' && (evaluation || mock)), `Offline allowlist: ${path}`).toBe(true)
     if (evaluation) state.evaluations.push(body)
     if (state.failApply && evaluation && Object.keys(body.outcomes).length) {
       return route.fulfill({ status: 503, json: { detail: 'Injected recoverable backend failure' } })
@@ -40,7 +41,8 @@ async function setup(page) {
     await route.fulfill({ response })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
   await expect.poll(() => state.last?.case_id).toBe('tnbc-record-gaps')
   return state
 }
@@ -81,8 +83,8 @@ test('real backend: complete budget-3 guided workflow, navigation and exact depe
   await select(page, 'Fictional report outcome', 'brca1-pathogenic')
   expect(state.evaluations.length).toBe(count)
   expect(state.last.patient).toEqual(baseline.patient)
-  for (const destination of ['Home', 'Explore Trials', 'Research Tools', 'Try Demo']) {
-    await page.getByRole('button', { name: destination, exact: true }).click()
+  for (const destination of ['Home', 'Explore Trials', 'Research Tools', 'Try a Demo']) {
+    await navigate(page, destination)
     if (destination === 'Research Tools') await expect(page.getByLabel('Synthetic portfolio')).toBeEnabled()
   }
   await expect(page.getByLabel('Fictional report outcome')).toHaveValue('brca1-pathogenic')
@@ -110,8 +112,8 @@ test('real backend: complete budget-3 guided workflow, navigation and exact depe
   const accounting = page.getByLabel('Review budget accounting')
   await expect(accounting.locator('div').filter({ hasText: 'Already spent' }).locator('strong')).toHaveText('3')
   await expect(accounting.locator('div').filter({ hasText: 'Remaining' }).locator('strong')).toHaveText('0')
-  for (const destination of ['Home', 'Explore Trials', 'Research Tools', 'Try Demo']) {
-    await page.getByRole('button', { name: destination, exact: true }).click()
+  for (const destination of ['Home', 'Explore Trials', 'Research Tools', 'Try a Demo']) {
+    await navigate(page, destination)
     if (destination === 'Research Tools') await expect(page.getByLabel('Synthetic portfolio')).toBeEnabled()
   }
   await expect(page.getByText('2 hypothetical reviews applied', { exact: true })).toBeVisible()
@@ -164,7 +166,7 @@ test('real backend: failed Apply recovery, insufficient budget, reset, case and 
 
 test('real backend: five studies, historical snapshots and blocked strict mock extraction', async ({ page }, info) => {
   const state = await setup(page)
-  await page.getByRole('button', { name: 'Explore Trials', exact: true }).click()
+  await navigate(page, 'Explore Trials')
   await page.getByText('Advanced Mode: source & extraction tools', { exact: true }).click()
   await expect(page.locator('button[data-study]')).toHaveCount(5)
   await page.getByRole('button', { name: 'Inspect extraction for NCT02648477', exact: true }).click()
@@ -180,7 +182,7 @@ test('real backend: five studies, historical snapshots and blocked strict mock e
   await expect(page.getByText('Assessment blocked', { exact: true })).toBeVisible()
   expect(state.extractions).toBe(1)
   await info.attach('mock-validation', { body: await result.innerText(), contentType: 'text/plain' })
-  await page.getByRole('button', { name: 'Try Demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Evidence Review', exact: true }).click()
   await expect.poll(() => state.last?.case_id).toBe('tnbc-record-gaps')
   expect(state.last.assessment.uncertainty).toBe('2')
 })

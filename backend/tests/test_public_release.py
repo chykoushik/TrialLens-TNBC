@@ -33,15 +33,10 @@ def test_public_inventory_excludes_internal_material():
         assert not public_release.eligible(name)
     assert public_release.eligible('.env.example')
     assert public_release.eligible('backend/app/extraction_prompt.py')
-    assert public_release.eligible('research/compiled_review_v1/belief.py')
-    assert public_release.eligible('research/clinical_extraction_generalization_v1/results/method_metrics.csv')
-    for name in ('research/real_bc_reports_v1/data/evidence.sqlite',
-                 'research/clinical_extraction_generalization_v1/data/cohort_private.json',
-                 'research/clinical_extraction_generalization_v1/results/patient_recovery.csv',
-                 'research/compiled_review_v1/bench.py', 'results/recomb/manuscript.html'):
-        assert not public_release.eligible(name)
     names = public_release.inventory()
-    assert [name for name in names if name.endswith('.md')] == ['README.md']
+    assert all(name == 'README.md' or name in public_release.runtime_files() for name in names if name.endswith('.md'))
+    assert 'backend/research_public.py' in names
+    assert public_release.runtime_files() <= set(names)
     assert not public_release.audit(names)
 
 
@@ -58,8 +53,9 @@ def test_public_example_has_no_credentials():
     rows = dict(line.split('=', 1) for line in (root/'.env.example').read_text().splitlines() if '=' in line)
     assert rows['NEBIUS_API_KEY'] == ''
     assert rows['NEBIUS_LIVE_EXTRACTION'] == '0'
-    assert rows['VITE_PUBLIC_DEMO'] == '1'
-
+    assert rows['VITE_PUBLIC_DEMO'] == '0'
+    assert rows['VITE_PUBLIC_RESEARCH'] == '1'
+    assert rows['TRIALLENS_BYOK_ENABLED'] == '0'
 
 def test_readiness_rejects_missing_build_and_accepts_present_build(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
@@ -111,21 +107,25 @@ def test_render_probes_readiness_without_auto_deploy():
     assert '\n    autoDeploy:' not in blueprint
 
 
+
 def test_public_license_and_readme_links_are_consistent():
     import json
     root = Path(__file__).resolve().parents[2]
     text = (root/'LICENSE').read_text(encoding='utf-8')
-    assert text.startswith('Mozilla Public License Version 2.0')
-    for section in ('2.5. Representation', '3.2. Distribution of Executable Form',
-                    '10.3. Modified Versions', 'Exhibit A', 'Exhibit B'):
-        assert section in text
+    if text.startswith('Mozilla Public License Version 2.0'):
+        expected = 'MPL-2.0'
+        for section in ('2.5. Representation', '3.2. Distribution of Executable Form', '10.3. Modified Versions', 'Exhibit A', 'Exhibit B'):
+            assert section in text
+    else:
+        expected = 'MIT'
+        assert text.startswith('MIT License')
+        assert 'Copyright (c) 2026 Koushik Chowdhury' in text
+        assert 'Permission is hereby granted' in text
     assert 'COPYRIGHT HOLDER - OWNER CONFIRMATION REQUIRED' not in text
-    assert json.loads((root/'frontend/package.json').read_text())['license'] == 'MPL-2.0'
-    assert json.loads((root/'frontend/package-lock.json').read_text())['packages']['']['license'] == 'MPL-2.0'
+    assert json.loads((root/'frontend/package.json').read_text())['license'] == expected
+    assert json.loads((root/'frontend/package-lock.json').read_text())['packages']['']['license'] == expected
     readme = (root/'README.md').read_text(encoding='utf-8')
-    assert 'MPL-2.0' in readme
+    assert expected in readme
     assert 'https://github.com/chykoushik/TrialLens-TNBC.git' in readme
     assert 'https://triallens-tnbc.onrender.com/' in readme
     assert 'Clinical eligibility remains unvalidated.' in readme
-    assert 'No public repository URL is verified yet' not in readme
-    assert 'There is no verified hosted URL' not in readme

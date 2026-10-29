@@ -1,0 +1,84 @@
+{
+  "patients": 2509,
+  "samples": 2509,
+  "one_sample_per_patient": true,
+  "patient_sample_identifier_matches": 2509,
+  "cohort_counts": {
+    "non_tnbc": 1979,
+    "confirmed_tnbc": 320,
+    "unknown_receptors": 210
+  },
+  "all_receptors_known": 1980,
+  "non_tnbc_with_incomplete_receptors": 319,
+  "receptor_value_counts": {
+    "ER_STATUS": {
+      "Positive": 1825,
+      "Negative": 644,
+      "NA": 40
+    },
+    "PR_STATUS": {
+      "Positive": 1040,
+      "Negative": 940,
+      "": 529
+    },
+    "HER2_STATUS": {
+      "Negative": 1733,
+      "": 529,
+      "Positive": 247
+    },
+    "ER_IHC": {
+      "Positve": 1817,
+      "Negative": 609,
+      "": 83
+    },
+    "HER2_SNP6": {
+      "NEUTRAL": 1436,
+      "": 529,
+      "GAIN": 438,
+      "LOSS": 101,
+      "UNDEF": 5
+    }
+  },
+  "er_cross_assay_comparable": 2426,
+  "er_cross_assay_disagreements": 128,
+  "er_ihc_typo": "Positve preserved raw; mapped to Positive only for explicitly labeled cross-assay comparison.",
+  "source_sha256": {
+    "data_clinical_patient.txt": "2a6bbadc6e4b2b07c0505559d438da959fc5c9aba55c7194abc394e2d6454995",
+    "data_clinical_sample.txt": "9a2291e065e2a0a5337b4eaeb09836e70b1bc3e1ed17714a013b53515697e6dc"
+  },
+  "molecular_files": [
+    "data_cna.txt",
+    "data_methylation_promoters_rrbs.txt",
+    "data_mrna_illumina_microarray.txt",
+    "data_mrna_illumina_microarray_zscores_ref_diploid_samples.txt",
+    "data_mutations.txt",
+    "meta_cna.txt",
+    "meta_methylation_promoters_rrbs.txt",
+    "meta_mrna_illumina_microarray.txt",
+    "meta_mrna_illumina_microarray_zscores_ref_diploid_samples.txt",
+    "meta_mutations.txt",
+    "cases_cna.txt",
+    "cases_cnaseq.txt"
+  ],
+  "medical_report_files": [],
+  "survival_endpoints": [
+    "OS_MONTHS",
+    "OS_STATUS",
+    "RFS_MONTHS",
+    "RFS_STATUS"
+  ],
+  "missing_required_clinical_variables": [
+    "ECOG",
+    "RECIST lesions",
+    "assay dates",
+    "screening date",
+    "receptor IHC percentages",
+    "HER2 IHC/FISH quantitative results",
+    "treatment agents/lines/dates",
+    "organ function laboratories",
+    "PD-L1 assay",
+    "pregnancy",
+    "current metastatic status"
+  ],
+  "scope": "Authentic structured archival clinical evidence. Cohorts and labels are reproducible rules, not independent adjudication."
+}

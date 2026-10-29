@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
@@ -96,12 +97,12 @@ async function choose(page, label, value, testInfo, lockedAfter = false) {
 async function openView(page, name) {
   if (name === 'Trial explorer') {
     if (fixturePages.has(page)) {
-      await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+      await navigate(page, 'Research Tools')
       await page.getByRole('button', { name: 'Source fixtures', exact: true }).click()
-    } else { await page.getByRole('button', { name: 'Explore Trials', exact: true }).click(); await page.getByText('Advanced Mode: source & extraction tools', { exact: true }).click() }
+    } else { await navigate(page, 'Explore Trials'); await page.getByText('Advanced Mode: source & extraction tools', { exact: true }).click() }
     return
   }
-  if (await page.getByRole('heading', { name: 'Try Demo', exact: true }).count()) {
+  if (await page.getByRole('heading', { name: 'Evidence Review', exact: true }).count()) {
     if (!await page.getByRole('navigation', { name: 'Demo steps' }).isVisible()) await page.getByText('Advanced Mode', { exact: true }).click()
     const names = { 'Patient evidence': 'Explore patient evidence', 'Criterion assessments': 'Understand criterion uncertainty', 'Evidence prioritization': 'Prioritize existing record reviews' }
     await page.getByRole('navigation', { name: 'Demo steps' }).getByRole('button', { name: new RegExp(names[name]) }).click()
@@ -117,7 +118,7 @@ async function cycle(page, label, values, info) {
 test('native popups reopen across all five workspaces', async ({ page }, info) => {
   await mockApi(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await expect(page.getByLabel('Synthetic portfolio')).toBeEnabled()
   await cycle(page, 'Synthetic portfolio', ['scenario-b', 'scenario-c', 'scenario-b', 'scenario-a'], info)
   await cycle(page, 'Application mode', ['tnbc', 'research', 'tnbc'], info)
@@ -161,7 +162,7 @@ test('native popups with actual local backend data and no extraction requests', 
     await route.fulfill({ response: await route.fetch({ url: `${backend.origin}${path}${url.search}` }) })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await expect(page.getByRole('combobox', { name: 'Synthetic portfolio', exact: true })).toBeEnabled()
   const scenarios = await page.getByRole('combobox', { name: 'Synthetic portfolio', exact: true }).locator('option').evaluateAll(nodes => nodes.map(node => node.value))
   await cycle(page, 'Synthetic portfolio', [scenarios[1], scenarios[2], scenarios[1], scenarios[0]], info)
@@ -199,7 +200,7 @@ test('native popups with actual local backend data and no extraction requests', 
 test('native popups reopen after simulation, reset, navigation and recoverable errors', async ({ page }, info) => {
   const state = await mockApi(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await openView(page, 'Evidence prioritization')
   await page.getByLabel('Total review budget').fill('3')
   await choose(page, 'Simulated report for review-pdl1-report', 'cps-15', info, true)
@@ -231,10 +232,10 @@ test('native popups reopen after mobile navigation, Escape and viewport changes'
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await cycle(page, 'Application mode', ['tnbc', 'research', 'tnbc'], info)
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
-  await page.getByRole('button', { name: 'Try Demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Evidence Review', exact: true }).click()
   await openView(page, 'Patient evidence')
   await cycle(page, 'Evidence category', ['Biomarkers', 'Laboratory', 'Biomarkers', 'All categories'], info)
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
@@ -252,7 +253,8 @@ test('guided product flow preserves context and applies drafts explicitly', asyn
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button')).toHaveCount(4)
   await page.screenshot({ path: info.outputPath('home-desktop.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
   if (!await page.getByRole('navigation', { name: 'Demo steps' }).isVisible()) await page.getByText('Advanced Mode', { exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Fictional TNBC case', exact: true })).toHaveValue('tnbc-record-gaps')
   await expect(page.getByRole('combobox', { name: 'Fictional TNBC case', exact: true })).toHaveCount(1)
@@ -263,24 +265,25 @@ test('guided product flow preserves context and applies drafts explicitly', asyn
   const requests = state.posts.length
   await choose(page, 'Fictional report outcome', value, info)
   expect(state.posts.length).toBe(requests)
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
-  await page.getByRole('button', { name: 'Try Demo', exact: true }).click()
+  await navigate(page, 'Home')
+  await page.getByRole('button', { name: 'Evidence Review', exact: true }).click()
   await expect(page.getByLabel('Fictional report outcome')).toHaveValue(value)
   await page.getByRole('button', { name: 'Apply simulated review', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Hypothetical results applied' })).toBeVisible()
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await choose(page, 'Synthetic portfolio', 'scenario-b', info)
   await page.getByRole('button', { name: 'Reports & benchmarks', exact: true }).click()
   await page.getByRole('navigation', { name: 'Saved report list' }).getByRole('button').first().click()
   await expect(page.locator('pre[aria-label="Original saved report"]')).toBeVisible()
-  await page.getByRole('button', { name: 'Try Demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Evidence Review', exact: true }).click()
   await expect(page.getByLabel('Fictional TNBC case')).toHaveValue('tnbc-record-gaps')
   await expect(page.getByRole('status').filter({ hasText: 'Hypothetical results applied' })).toBeVisible()
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
+  await navigate(page, 'Home')
   await page.setViewportSize({ width: 390, height: 844 })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('home-mobile.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
   if (!await page.getByRole('navigation', { name: 'Demo steps' }).isVisible()) await page.getByText('Advanced Mode', { exact: true }).click()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('demo-mobile.png'), fullPage: true })

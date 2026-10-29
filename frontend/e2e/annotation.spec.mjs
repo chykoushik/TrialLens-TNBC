@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test.skip(!process.env.DROPDOWN_BACKEND, 'Requires the local offline annotation backend')
@@ -26,7 +27,7 @@ test('public protocol annotation uses real source, physical selection, versioned
     await route.fulfill({ response })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await page.getByRole('button', { name: 'Protocol annotation', exact: true }).click()
   await expect(page.getByLabel('Annotation snapshot')).toBeEnabled()
   await expect(page.getByLabel('Annotation study').locator('option')).toHaveCount(5)
@@ -68,8 +69,8 @@ test('public protocol annotation uses real source, physical selection, versioned
   await choose(page, 'Annotation snapshot', 1)
   if (!await page.getByLabel('Span start').isVisible()) await page.getByText('Advanced Mode: annotation details', { exact: true }).click()
   await expect(page.getByText('Boundary: unreviewed', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Home', exact: true }).click()
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Home')
+  await navigate(page, 'Research Tools')
   if (!await page.getByLabel('Span start').isVisible()) await page.getByText('Advanced Mode: annotation details', { exact: true }).click()
   await expect(page.getByText('Boundary: unreviewed', { exact: true })).toBeVisible()
   await page.getByLabel('Reviewer identifier or pseudonym').fill('browser-software-test-only')

@@ -1,3 +1,4 @@
+import { openResearchSection } from './testNavigation'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App from './App'
@@ -7,7 +8,7 @@ import fixture from './fixtures/tnbc_demo.json'
 import type { Evaluation } from './types'
 
 const research = ['scenario-a', 'scenario-b', 'scenario-c'].map(case_id => ({ case_id, trial_count: 2, review_count: 2, budgets: ['3'], unsupported: null }))
-function renderApp() { render(<App />); fireEvent.click(screen.getByRole('button', { name: 'Research Tools' })) }
+function renderApp() { render(<App />); openResearchSection() }
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => {

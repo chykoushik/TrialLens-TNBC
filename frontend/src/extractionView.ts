@@ -6,7 +6,7 @@ export type ExtractionSource = {
 }
 export type SourceSelection = {
   source: ExtractionSource; snapshots: Trial[]; warnings: string[]; mock_version: string
-  configuration?: { ready: boolean; model: string; errors: string[] }
+  configuration?: { ready: boolean; model: string; errors: string[]; authorization_id?: string | null; authorized_maximum_estimated_cost_usd?: string | null }
 }
 export type ExtractionReport = {
   source: ExtractionSource | null

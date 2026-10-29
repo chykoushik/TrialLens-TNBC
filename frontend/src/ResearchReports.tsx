@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react'
 import { EmptyState } from './ui'
 
-const reports: Record<string, () => Promise<unknown>> = import.meta.env.VITE_PUBLIC_DEMO === '1' ? {} : import.meta.glob('../../results/{benchmark,prioritization}/**/report.md', { query: '?raw', import: 'default' })
+const reports: Record<string, () => Promise<unknown>> = import.meta.env.VITE_PUBLIC_DEMO === '1' ? {} : {
+  '../../results/prioritization/coherent/20261025-imperfect-analysis-v1/report.md': () => import('../../results/prioritization/coherent/20261025-imperfect-analysis-v1/report.md?raw').then(module => module.default),
+  '../../results/prioritization/sensitivity/20261025-final/report.md': () => import('../../results/prioritization/sensitivity/20261025-final/report.md?raw').then(module => module.default),
+}
 export default function ResearchReports() {
   const generation = useRef(0)
   const [selected, setSelected] = useState('')

@@ -1,4 +1,4 @@
-﻿import type { Assessed, Evaluation, Review } from './types'
+import type { Assessed, Evaluation, Review } from './types'
 
 export const stateText = { satisfied: 'Clause met', violated: 'Clause not met', unknown: 'Missing information', temporal: 'Timing unclear', conflict: 'Conflicting records' }
 export function allNodes(data: Evaluation): Assessed[] {

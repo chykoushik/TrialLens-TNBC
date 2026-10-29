@@ -27,6 +27,7 @@ export default function TrialExtraction({ nctId, snapshot, study }: { nctId: str
   const [report, setReport] = useState<ExtractionReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'mock' | 'live'>('mock')
+  const [operatorToken, setOperatorToken] = useState('')
   const [approved, setApproved] = useState(false)
   const [running, setRunning] = useState(false)
   const [sourceError, setSourceError] = useState('')
@@ -66,15 +67,15 @@ export default function TrialExtraction({ nctId, snapshot, study }: { nctId: str
 
   async function extract() {
     if (!selection || running || requestLock.current || !selection.source.text.trim()
-        || (mode === 'live' && (!approved || !selection.configuration?.ready))) return
+        || (mode === 'live' && (!approved || !operatorToken || !selection.configuration?.ready))) return
     const version = generation.current
     requestLock.current = true
     setRunning(true); clearResult()
     try {
       const result = await api<ExtractionReport>(`/saved-trials/${encodeURIComponent(nctId)}/extractions`, {
         snapshot: selectedSnapshot, snapshot_sha256: selection.source.sha256,
-        mode, mock_version: selection.mock_version, ...(mode === 'live' ? { live_approved: approved } : {}),
-      })
+        mode, mock_version: selection.mock_version, ...(mode === 'live' ? { live_approved: approved, ...(selection.configuration?.authorization_id ? { authorization_id: selection.configuration.authorization_id, maximum_estimated_cost_usd: selection.configuration.authorized_maximum_estimated_cost_usd } : {}) } : {}),
+      }, undefined, mode === 'live' ? { Authorization: `Bearer ${operatorToken}` } : undefined)
       if (generation.current === version) setReport(result)
     } catch (error) {
       if (generation.current === version) setRequestError(error instanceof Error ? error.message : 'Extraction request failed')
@@ -154,7 +155,8 @@ export default function TrialExtraction({ nctId, snapshot, study }: { nctId: str
             {selection.configuration ? <details className="live-configuration"><summary>Live configuration: {selection.configuration.ready ? 'ready for approval' : 'unavailable or request budget consumed'}</summary><p>{selection.configuration.model}</p>{selection.configuration.errors.map(code => <p key={code}>{code}</p>)}</details>
               : <p className="muted">Live extraction is unavailable in the current server configuration.</p>}
             {mode === 'live' && <label className="live-approval"><input type="checkbox" checked={approved} disabled={running} onChange={event => setApproved(event.target.checked)} />Approve one paid live extraction of this snapshot</label>}
-            <Button variant="primary" onClick={extract} disabled={running || !selection.source.text.trim() || (mode === 'live' && (!approved || !selection.configuration?.ready))}>
+            {mode === 'live' && <label>Operator access code<input type="password" autoComplete="off" value={operatorToken} onChange={event => setOperatorToken(event.target.value)} /></label>}
+            <Button variant="primary" onClick={extract} disabled={running || !selection.source.text.trim() || (mode === 'live' && (!approved || !operatorToken || !selection.configuration?.ready))}>
               {running ? 'Running extraction...' : mode === 'mock' ? 'Run mock extraction' : 'Run one live NVIDIA Nemotron extraction'}
             </Button>
           </div>

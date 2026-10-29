@@ -1,3 +1,4 @@
+import { navigate } from './navigation.mjs'
 import { test, expect } from '@playwright/test'
 
 test('saved annotation sources use the configured backend and recover after failure', async ({ page, request }, info) => {
@@ -8,7 +9,7 @@ test('saved annotation sources use the configured backend and recover after fail
     if (response.url().includes('/annotations/')) network.push({ url: response.url(), status: response.status() })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Research Tools', exact: true }).click()
+  await navigate(page, 'Research Tools')
   await page.getByRole('button', { name: 'Protocol annotation', exact: true }).click()
   await expect(page.getByLabel('Annotation snapshot')).toBeEnabled()
   for (const nct of ['NCT02648477', 'NCT01770353']) {

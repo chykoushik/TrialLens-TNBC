@@ -1,9 +1,8 @@
 TrialLens-TNBC third-party notices
 
 Project-owned source is licensed under Mozilla Public License 2.0; see LICENSE.
-Third-party materials retain their original licenses and copyright notices.
-The license selection is approved; ownership and contributor rights remain
-unconfirmed in the available records and must be confirmed before publication.
+Copyright (c) 2026 Koushik Chowdhury. Other contributors retain their respective rights.
+Third-party licenses and copyright notices remain separate.
 
 React, React DOM and Scheduler use MIT licenses. Their original notices are in
 third_party/licenses/react.txt, react-dom.txt and scheduler.txt. Vite's license
@@ -23,7 +22,7 @@ by NVIDIA or Nebius is implied.
 
 The application attributes registry sources to ClinicalTrials.gov, operated by
 the U.S. National Library of Medicine, and links the original study pages.
-Raw registry snapshots are not distributed. Interactive patient cases,
+Only explicitly approved public registry snapshots are distributed. Interactive patient cases,
 protocol examples and possible report outcomes are authored fictional examples,
 not real patient data or clinical validation. Curated extraction diagnostics
 remain explicitly validation-failed and unreviewed.

@@ -1,0 +1,67 @@
+import { test, expect } from '@playwright/test'
+import { navigate } from './navigation.mjs'
+
+for (const width of [1440, 390]) {
+  test(`real saved trial source review at ${width}px without invented assessments`, async ({ page, request }, info) => {
+    await page.setViewportSize({ width, height: 950 })
+    const catalog = await (await request.get('/api/research/trials')).json()
+    const records = catalog.trials.filter(item => item.is_synthetic !== true)
+    expect(records.map(item => item.nct_id).sort()).toEqual(['NCT01770353', 'NCT02648477', 'NCT03538028', 'NCT04331067', 'NCT04691375'])
+    const trial = records.find(item => item.nct_id === 'NCT01770353')
+    const posts = []
+    const urls = []
+    page.on('request', item => { urls.push(item.url()); if (item.method() === 'POST') posts.push(item.url()) })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Choose a saved trial' })).toBeVisible()
+    await expect(page.locator('.simple-trial-list button')).toHaveCount(records.length)
+    await expect(page.getByRole('heading', { name: 'Choose a trial scenario' })).toHaveCount(0)
+    await page.getByLabel('Find a study').fill(trial.nct_id)
+    await expect(page.locator('.simple-trial-list button')).toHaveCount(1)
+    await page.locator('.simple-trial-list button').click()
+    await expect(page.getByRole('heading', { name: trial.title, exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    expect(await page.getByLabel('Exact original eligibility text').textContent()).toBe(trial.eligibility_criteria)
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    await expect(page.getByText(/0 approved executable mappings/)).toBeVisible()
+    await expect(page.getByText(/No authorized patient records/)).toBeVisible()
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    await expect(page.getByText('Unresolved / unavailable for automated assessment').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Report prioritization is not available for this record' })).toBeVisible()
+    await expect(page.getByRole('radio')).toHaveCount(0)
+    await page.screenshot({ path: info.outputPath(`real-source-${width}.png`), fullPage: true })
+    await page.reload()
+    await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Report prioritization is not available for this record' })).toBeVisible()
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Source review complete; eligibility remains unresolved' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Read original ClinicalTrials.gov source' })).toHaveAttribute('href', trial.source_url)
+    await page.getByRole('button', { name: 'Back', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Report prioritization is not available for this record' })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    expect(posts).toEqual([])
+    expect(urls.some(url => /\/(tnbc|research)\/cases|\/extractions/.test(url))).toBe(false)
+    await navigate(page, 'Research Results')
+    await expect(page.getByRole('heading', { name: 'METABRIC: reviewing incomplete evidence' })).toBeVisible()
+    await navigate(page, 'Evidence Review')
+    await page.getByRole('button', { name: 'Try a Demo', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Choose a trial scenario' })).toBeVisible()
+    await expect(page.getByText(/Fictional case:/)).toBeVisible()
+  })
+}
+
+test('a mapping-service failure preserves the real source and supports retry', async ({ page }) => {
+  let fail = true
+  await page.route('**/api/research/trials/*/review?*', async route => fail ? route.fulfill({ status: 503, json: { detail: 'Injected test outage' } }) : route.continue())
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.locator('.simple-trial-list button').filter({ hasText: 'NCT02648477' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByLabel('Exact original eligibility text')).not.toBeEmpty()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('original trial text remains available')
+  fail = false
+  await page.getByRole('button', { name: 'Retry mapping review', exact: true }).click()
+  await expect(page.getByText(/0 approved executable mappings/)).toBeVisible()
+})

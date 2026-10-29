@@ -1,0 +1,45 @@
+import { test, expect } from '@playwright/test'
+
+test('guided Nemotron inspection stays offline and never approves failed source validation', async ({ page, request }, info) => {
+  const providerPosts = []
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.route('**/api/**', route => {
+    if (route.request().method() === 'POST' && route.request().url().includes('/extractions')) {
+      providerPosts.push(route.request().url())
+      return route.abort()
+    }
+    return route.continue()
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Start Evidence Review', exact: true }).click()
+  await page.locator('.simple-trial-list button').filter({ hasText: 'NCT01770353' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'NVIDIA criteria extraction' })).toBeVisible()
+  await expect(page.getByText(/Live extraction is unavailable/)).toBeVisible()
+  await page.getByText('Operator access and live request controls', { exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Request NVIDIA extraction', exact: true })).toBeDisabled()
+  await expect(page.getByText(/original request reservation remains consumed/)).toBeVisible()
+  const state = await (await request.get('/api/saved-trials/NCT01770353/inference')).json()
+  const failed = state.attempts.find(item => item.mode === 'live' && item.status === 'validation_failed')
+  expect(failed).toBeTruthy()
+  await page.getByLabel('Saved extraction').selectOption(failed.id)
+  await expect(page.getByText('Saved live-request attempt', { exact: true })).toBeVisible()
+  const options = page.getByLabel('Extracted condition').locator('option')
+  await expect(options).not.toHaveCount(1)
+  const value = await options.nth(1).getAttribute('value')
+  await page.getByLabel('Extracted condition').selectOption(value)
+  await page.getByLabel('Operator access code', { exact: true }).fill('software-ui-test-code-not-a-real-credential')
+  await page.getByLabel('Reviewer or pseudonym').fill('Browser software test')
+  await page.getByLabel('Review note', { exact: true }).fill('UI test only; no review is submitted.')
+  await page.getByRole('checkbox', { name: /I checked the complete source meaning/ }).check()
+  await expect(page.getByRole('button', { name: 'Approve supported mapping' })).toBeDisabled()
+  await expect(page.getByText(/No authorized real-patient evidence adapter is configured/)).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 900 })
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByRole('heading', { name: 'NVIDIA criteria extraction' }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('nemotron-offline-mobile.png') })
+  expect(providerPosts).toEqual([])
+  expect(errors).toEqual([])
+})

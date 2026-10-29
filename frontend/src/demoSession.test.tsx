@@ -1,3 +1,4 @@
+import { openDemo } from './testNavigation'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import App from './App'
@@ -28,8 +29,9 @@ test('restore checks backend before calculating, retains drafts and replays each
   mock()
   render(<App />)
   localStorage.setItem('unrelated-software-fixture', 'keep')
-  await screen.findByText(/Fictional demonstration restored and checked/)
-  fireEvent.click(screen.getByRole('button', { name: 'Try the demo' }))
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/evaluate'))).toBe(false)
+  expect(screen.queryByText(/Fictional demonstration restored and checked/)).not.toBeInTheDocument()
+  openDemo()
   fireEvent.click(screen.getByText('Advanced Mode', { selector: 'summary' }))
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, options]) => String(url).endsWith('/evaluate') && JSON.parse(String(options?.body)).outcomes['review-germline-report'] === 'brca1-pathogenic')).toBe(true))
   const requests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/tnbc/session/restore'))
@@ -47,18 +49,21 @@ test('backend failure preserves the saved session and blocks restored calculatio
   localStorage.setItem(DEMO_STORAGE, stored)
   mock(503)
   render(<App />)
+  openDemo()
   await screen.findByRole('button', { name: 'Retry saved demonstration' })
   expect(localStorage.getItem(DEMO_STORAGE)).toBe(stored)
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/evaluate'))).toBe(false)
   mock()
   fireEvent.click(screen.getByRole('button', { name: 'Retry saved demonstration' }))
-  await screen.findByText(/Fictional demonstration restored and checked/)
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/evaluate'))).toBe(true))
+  expect(screen.queryByText(/Fictional demonstration restored and checked/)).not.toBeInTheDocument()
 })
 
 test('backend rejection discards incompatible history rather than executing it', async () => {
   localStorage.setItem(DEMO_STORAGE, JSON.stringify(value()))
   mock(409)
   render(<App />)
+  openDemo()
   await screen.findByText(/Saved fictional demonstration rejected/)
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, options]) => String(url).endsWith('/evaluate') && Object.keys(JSON.parse(String(options?.body)).outcomes).length)).toBe(false))
 })
