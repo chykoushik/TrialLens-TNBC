@@ -1,141 +1,92 @@
 # TrialLens-TNBC
 
-A research prototype for reviewing missing, conflicting and time-dependent evidence in fictional triple-negative breast cancer (TNBC) trial scenarios. The demonstration runs locally without API credentials. This is not a validated clinical eligibility system, diagnostic tool or treatment recommendation service.
+TrialLens-TNBC investigates **risk-constrained adaptive evidence review for clinical trial eligibility**, motivated by triple-negative breast cancer (TNBC). Given logical eligibility requirements, uncertain reports and a limited review budget, it asks which existing evidence to review next and when to abstain.
 
-## Overview
+The released research application combines real ClinicalTrials.gov browsing, source-linked trial analysis, an executable synthetic planning demonstration and aggregate research results. It is a computational research prototype, not a clinically validated patient screening system.
 
-Clinical criteria can depend on multiple records, assay details, timing and cohort-specific rules. TrialLens-TNBC makes these dependencies visible and asks which existing record to review next under a limited review budget. Missing evidence remains unresolved rather than being treated as a negative result.
+## Research contribution and methodology
 
-## What TrialLens-TNBC does
+The manuscript, *Compiled Product-Mixture Beliefs for Error-Constrained Adaptive Evidence Review*, studies an exact computational specialization of constrained partially observable planning. Its contribution is a model-specific implementation and analysis, building on established inference and planning methods; it does not establish a new general inference algorithm.
 
-The demo evaluates authored fictional evidence against fictional protocol clauses, prioritizes record reviews, and recomputes assessments after a user applies an authored fictional report outcome. It does not order tests, accept real patient uploads or establish trial eligibility.
+- **Eligibility logic:** AND, OR and NOT predicates preserve repeated and shared Boolean criteria. The application separately exposes satisfied, violated, unknown, temporal and conflict evidence states.
+- **Probabilistic inference:** finite mixtures of product beliefs represent uncertain criterion truth and correlated reports under a specified source-group model. Compiled reduced ordered binary decision diagrams (BDDs) support weighted probability evaluation without enumerating every truth assignment for that model.
+- **Inference caching:** reusable posterior summaries and BDD evaluations avoid repeated work. Diagram size, source mixtures and adaptive histories can still grow exponentially.
+- **Adaptive prioritization:** constrained policy-column generation selects reports and stopping decisions to optimize utility, subject to hard review budgets and modelwise expected-error caps. Information gain is displayed as a diagnostic, not the planner's objective.
+- **Reliability and abstention:** policies can withhold assertions. The interactive planner uses three fixed reliability models and reports a numerical optimization gap. Separate research code evaluates continuous-interval risk certification and abstention repair; that certificate is not provided by the interactive demonstration.
 
-The source also contains a controlled local workspace for registry browsing, strict extraction validation and annotation. The public package includes explicitly allowlisted registry snapshots, aggregate research results and the actual compiled inference/planning code. Raw provider responses, authorization records, private annotations and individual patient records are excluded.
+The risk constraint concerns the expected fraction of incorrect protocol assertions across all protocol opportunities under the supplied models. It is neither an individual-patient safety guarantee nor an error rate conditional on answering.
 
-## Key features
+See the published [methods and findings](results/recomb/20261026-compiled-review-v2/research_report.md), [compiled inference implementation](research/compiled_review_v1), [constrained planner](research/constrained_review_v1) and [certification implementation](research/certified_review_v1). The public methods excerpt accompanies the local manuscript; the full manuscript is not bundled in this release. Scientific attribution includes Bryant's BDDs, Chavira and Darwiche's weighted model counting, and Walraven and Spaan's constrained POMDP column generation, discussed in the methods report.
 
-- Five explicit criterion states: satisfied, violated, unknown, temporal and conflict.
-- Provenance, logical dependencies, temporal checks and budgeted review planning.
-- Before/after explanations and backend-checked restoration of fictional browser sessions.
-- Four fictional cases and predefined report outcomes, with no demo credentials.
-- Source-grounded extraction validation that leaves unsupported proposals unreviewed.
-- Real ClinicalTrials.gov search and source-only trial analysis, plus compiled Boolean inference and constrained adaptive review.
-- A public server without paid provider, operator or annotation routes. BYOK remains available only in the controlled local workspace.
+## Application
 
-## Application workflow
+1. **Search and select trials:** query ClinicalTrials.gov by condition, intervention, keywords or NCT identifier, or select a bundled registry snapshot.
+2. **Analyze trial:** inspect source-linked criteria, unresolved passages and any matching saved extraction evidence. This action makes no paid model request and produces no patient eligibility determination.
+3. **Evidence Review:** execute the actual compiled inference and constrained planner on frozen synthetic paper scenarios; choose a budget and apply hypothetical report outcomes. Four additional fictional TNBC cases illustrate missing, stale and conflicting evidence.
+4. **Research Results:** inspect allowlisted aggregate tables, comparisons, source paths and checksums for synthetic studies, METABRIC, TCGA, caching and certification.
 
-1. Search ClinicalTrials.gov or choose a bundled saved trial.
-2. Select the trial and click **Analyze trial**. This sends no paid inference request.
-3. Read source-linked results and their limitations.
-4. Open **Evidence Review** to run the actual planner on synthetic scenarios.
-5. Browse **Research Results** for the paper, baselines, METABRIC, TCGA, BDD, caching and certification findings.
+The frontend uses React, TypeScript and Vite; the backend uses FastAPI and Python. The public entry point is `backend.research_public:app`. The broader `backend.app.main:app` supplies controlled local research tools and is not the public server.
 
-Research Tools distinguishes failed model extraction from accepted source evidence. Registry links are context, not the source of the fictional patient's assessment.
+## NVIDIA Nemotron through Nebius
 
-## Architecture and technology stack
+The controlled extraction integration targets NVIDIA `nvidia/nemotron-3-super-120b-a12b` through Nebius Token Factory's OpenAI-compatible endpoint, `https://api.tokenfactory.nebius.com/v1`.
 
-```text
-React 19 + TypeScript browser UI
-             | same-origin /api
-FastAPI: backend.research_public:app
-             |
-Python criterion assessment, review planning and authored fixtures
-```
+Its section-based pipeline preserves inclusion/exclusion boundaries, checks source coverage, remaps quotation offsets to the original registry text and validates the merged structured proposal. Ambiguous or oversized sections, unsupported fields and incomplete responses remain unresolved or fail validation. Source alignment and schema validation do not establish clinical correctness or an approved executable eligibility mapping; qualified human review remains necessary.
 
-Vite 7 builds the frontend. Vitest and Testing Library cover frontend behavior; pytest and FastAPI TestClient cover the backend; Playwright covers browser journeys. The public server serves the built UI and API on one origin. `backend.app.main:app` is the broader controlled workspace, not the public deployment entry point. Application extraction templates are required runtime code, not development-agent instructions.
+Historical Nemotron attempts include failures and a structured response rejected by whole-output validation. These are not a clinical accuracy benchmark. Section-processing tests use mocked responses; they do not demonstrate successful live extraction for every trial. Raw provider responses and credentials are excluded from the public repository.
 
-## Screenshots
+**Public BYOK is disabled.** The public server blocks visitor extraction and exposes no operator inference or annotation routes. Registry analysis and the research demonstration require no provider key and perform no live model inference. The integration is relevant to the Nebius × NVIDIA hackathon; this repository alone does not establish compliance with the [official submission rules](https://nebiusglobalaihackathon.devpost.com/rules).
 
-Actual local application captures using fictional data:
+## Evaluation
 
-![Fictional evidence review and before/after assessment](assets/screenshots/demo-desktop.png)
+The manuscript's synthetic experiments and the accompanying archival extensions answer different questions and should not be pooled as clinical validation.
 
-<img src="assets/screenshots/home-mobile.png" alt="TrialLens-TNBC mobile home page" width="320">
+| Study | Supported finding and boundary |
+|---|---|
+| Compiled inference | Across 252 isolated runs: 159 successful, 84 unsupported under declared limits and nine timed out. All 96 successful matched-reference comparisons agreed within `5.22e-15`. The benchmark reached 64-criterion posterior queries and 24-criterion constrained planning; these are distinct workloads. Small cases favored the earlier analytical backend. |
+| Adaptive review | On 48 synthetic cases at two budgets (96 conditions), exact constrained planning improved mean utility by `0.005065` over an optimized same-risk baseline mixture, with a paired synthetic-seed 95% interval `[0.003057, 0.007053]`. Cost and error counts also increased slightly; there was no consistent utility advantage over depth-two pricing. |
+| Reliability | No primary exact-policy cap violations occurred when the actual law was included by construction. Outside the assumed set, violations occurred in 46/48 conditions; the repaired robust comparator also failed in 34/48. These results do not establish clinical calibration or safety. |
+| Certification and caching extension | Separate continuous-interval certification and abstention-repair experiments are retained. Reusable caching achieved about 1.35–1.67× local median speedups on repeated-query workloads, with three repetitions per final size; this is not an end-to-end planning speedup. |
+| METABRIC | An archive of 2,509 patients supported limited archival mappings; the complete-case evaluation used 1,021 patients and two proxy predicates. At the primary budget, nominal constrained, unconstrained and one-/two-step lookahead planners had identical proxy metrics. Matched-coverage analyses do not establish a general superiority claim. Archival rules and simulated observation errors are not current trial eligibility labels. |
+| TCGA | Extraction audits compare rule variants, source alignment, recovery, precision and withholding. The generalization audit processed 100 reports, with a limited reviewed subset and historically exposed assistant annotations. Neither independent clinical gold nor exhaustive document-level accuracy is established. |
 
-## System requirements
+Baselines include random/cheapest/uncertainty review, information gain, VOI per cost, an EC2 adaptation, one-/two-step lookahead, exact adaptive and fixed selection, replanning, robust planning and an optimized feasible baseline mixture. Their scopes and objectives differ.
 
-- Python 3.12 and public package registry access during installation.
-- Node.js 22.12 or later compatible with Vite 7, and npm. Local verification used Node 24 and npm 11; `package-lock.json` pins the frontend tree.
-- Windows PowerShell and a modern browser. No GPU or model download is required for the fictional demo.
-- Chrome or Edge for the supplied browser-test projects.
+Public evidence includes [benchmark summaries](results/recomb/20261026-compiled-review-v2/benchmark_summary.csv), [policy comparisons](results/recomb/20261026-compiled-review-v2/decision_means.csv), [certification results](results/recomb/20261026-certified-review-v1/comparison.csv), [METABRIC findings](research/metabric_realdata_v1/reports/scientific_findings.md), [matched-coverage comparisons](research/matched_coverage_v1/results/primary_table.csv) and [TCGA audit metrics](research/clinical_extraction_generalization_v1/results/method_metrics.csv). Scientific code and tests are retained; restricted patient records, private annotations and complete local experiment workspaces are not distributed, so a public checkout alone cannot reproduce every archival experiment.
 
-## Clone or download
+## Local setup
 
-Source repository: https://github.com/chykoushik/TrialLens-TNBC.
+Requires Python 3.12, Node.js 22.12 or later compatible with Vite 7, npm and a browser. No local GPU or model weights are required for the public research application. Commands below use Windows PowerShell from the repository root.
 
 ```powershell
-git clone https://github.com/chykoushik/TrialLens-TNBC.git TrialLens-TNBC
+git clone https://github.com/chykoushik/TrialLens-TNBC.git
 Set-Location TrialLens-TNBC
-```
-
-Alternatively use GitHub **Code > Download ZIP**, extract it and open PowerShell in the extracted project directory. The package includes this README and an explicit allowlist of authored research reports needed by the public research views.
-
-## Backend installation and configuration
-
-Run from the project root. Activation is optional because commands use the virtual environment interpreter directly:
-
-```powershell
-New-Item -ItemType Directory -Force cache | Out-Null
-$env:TEMP = "$PWD/cache"
-$env:TMP = "$PWD/cache"
-$env:PIP_CACHE_DIR = "$PWD/cache/pip"
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-demo.lock.txt
-.\.venv\Scripts\python.exe -m pip check
-```
+npm.cmd --prefix frontend ci
 
-The pinned file includes API and test dependencies. `requirements.txt` lists direct dependencies; use the lock file above for tested versions.
-
-## Frontend installation and configuration
-
-```powershell
-npm.cmd --prefix frontend ci --cache "$PWD/cache/npm" --no-audit --no-fund
 $env:VITE_PUBLIC_DEMO = '0'
 $env:VITE_PUBLIC_RESEARCH = '1'
 $env:VITE_API_BASE_URL = '/api'
 npm.cmd --prefix frontend run build
 New-Item -ItemType Directory -Force frontend/dist/assets/licenses | Out-Null
 Copy-Item third_party/licenses/*.txt frontend/dist/assets/licenses/
+
+$env:TRIALLENS_BYOK_ENABLED = '0'
+$env:TRIALLENS_PUBLIC_RESEARCH = '1'
+$env:PORT = '8080'
+.\.venv\Scripts\python.exe -B -m backend.serve_public
 ```
 
-`VITE_*` variables are public build-time settings. Rebuild after changing them. Never put an API key into a `VITE_*` variable.
+Open `http://127.0.0.1:8080`. The launcher serves the built frontend and API together; `/api/health` and `/api/readiness` report service and bundled-artifact readiness.
 
-## Environment variables
-
-`.env.example` has empty credential fields and safe example values. Neither the Python server nor Vite automatically loads it; Vite explicitly disables environment-file loading. Set process variables in PowerShell. Do not commit actual environment files or credentials.
-
-| Variable | Safe value | Purpose |
-|---|---|---|
-| `VITE_PUBLIC_DEMO` | `0` | Legacy fictional-only build; disabled for the complete research demo. |
-| `VITE_PUBLIC_RESEARCH` | `1` | Public research interface; hides operator and unsupported local controls. |
-| `TRIALLENS_BYOK_ENABLED` | `0` | Public server always blocks BYOK until infrastructure handling is verified. |
-| `VITE_API_BASE_URL` | `/api` | Same-origin API path. |
-| `TRIALLENS_API_TARGET` | `http://127.0.0.1:8000` | Vite development proxy target. |
-| `PORT` | `8080` | Port for the optional `backend.serve_public` launcher. |
-| `TRIALLENS_PUBLIC_DEMO` | `1` | Restricts the broader workspace; dedicated public server is independent. |
-| `TRIALLENS_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Broader workspace CORS. |
-| `NEBIUS_API_KEY` | empty | Controlled integration only; leave unset for demo. |
-| `NEBIUS_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Controlled integration model ID. |
-| `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1` | Controlled inference endpoint. |
-| `NEBIUS_TIMEOUT_SECONDS` | `120` | Controlled request timeout. |
-| `NEBIUS_LIVE_EXTRACTION` | `0` | Live extraction disabled. |
-| `NEBIUS_INPUT_USD_PER_MILLION` / `NEBIUS_OUTPUT_USD_PER_MILLION` | empty | Optional declared pricing; no price assumed. |
-
-## Start the backend and frontend
-
-Serve the built public UI and backend together:
-
-```powershell
-.\.venv\Scripts\python.exe -B -m uvicorn backend.research_public:app --host 127.0.0.1 --port 8080 --limit-concurrency 16 --no-access-log --no-proxy-headers
-```
-
-For frontend development, use two terminals at the project root. Terminal one:
+For frontend development, start the public backend in one terminal:
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m uvicorn backend.research_public:app --host 127.0.0.1 --port 8000 --no-access-log --no-proxy-headers
 ```
 
-Terminal two:
+In a second terminal, set the frontend variables and run:
 
 ```powershell
 $env:VITE_PUBLIC_DEMO = '0'
@@ -145,30 +96,15 @@ $env:TRIALLENS_API_TARGET = 'http://127.0.0.1:8000'
 npm.cmd --prefix frontend run dev
 ```
 
-The proxy removes `/api`; the public backend supports both prefixed and unprefixed demo routes. Stop servers with Ctrl+C.
+Open `http://127.0.0.1:5173`. Vite proxies `/api` to the backend.
 
-For the optional controlled workspace, use `backend.app.main:app` on port 8000 and set `VITE_PUBLIC_DEMO='0'`. Keep it local, set `VITE_PUBLIC_RESEARCH='0'` and `TRIALLENS_PUBLIC_RESEARCH='0'`, leave `NEBIUS_LIVE_EXTRACTION='0'` and expect missing source views. Its `/readiness` checks optional local source availability and can report missing private snapshots. Use the dedicated public server for the reproducible demo.
+[`.env.example`](.env.example) lists configuration names; neither server nor Vite automatically loads it. Set process variables explicitly. `VITE_*` values are public build-time settings and require a rebuild when changed. Never place credentials in them.
 
-## Open and use the application
+No `NEBIUS_API_KEY` is needed for this setup. Optional controlled local inference uses that secret, `NEBIUS_MODEL`, `NEBIUS_BASE_URL` and explicit live-extraction/budget authorization; it is separate from the public workflow. Leave `NEBIUS_LIVE_EXTRACTION=0` and public BYOK disabled for the demonstration. Do not commit credential files.
 
-Open `http://127.0.0.1:8080` for the built application or `http://127.0.0.1:5173` for development. Check connectivity:
+### Tests
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8080/api/health
-Invoke-RestMethod http://127.0.0.1:8080/api/readiness
-```
-
-Public health reports `visitor_extraction_enabled: false` and `operator_inference_enabled: false`. Public readiness checks the built frontend, bundled registry sources and required aggregate research artifacts. Browser storage contains fictional demonstration state only.
-
-## Available fictional demonstration data
-
-Four cases are included: **Complete fictional records**, **Missing assay-matched records**, **Stale laboratory observation** and **Conflicting performance records**. Two fictional protocol examples illustrate PD-L1 and germline BRCA record cohorts. All are synthetic.
-
-Frontend fixtures are in `frontend/src/fixtures/`; backend cases are constructed in `backend/app/tnbc_demo.py`. Backend fixtures are software test data, not clinical reference labels. No real patient records are included.
-
-## Testing
-
-Build the public frontend first, then run:
+After building the public frontend:
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m pytest backend/tests -q --basetemp=cache/pytest-public -o cache_dir=cache/pytest-public-cache
@@ -177,47 +113,26 @@ $env:VITE_PUBLIC_RESEARCH = '0'
 npm.cmd --prefix frontend test
 ```
 
-Frontend tests exercise both controlled and demo components with mocked responses. Tests requiring optional private saved-source integration data are explicitly skipped in a clean checkout. Provider unit tests use synthetic values and mocked transports, never paid inference.
+Frontend unit tests exercise controlled and public components with mocked responses. Backend tests needing excluded private fixtures are explicitly skipped. Scientific tests accompany the modules under `research/`; browser journeys are in `frontend/e2e/`. Provider unit tests use mocked transports, not paid inference. Restore `VITE_PUBLIC_RESEARCH=1` before rebuilding the public interface.
 
-For the existing public browser journey, keep the built public server running on port 8080 and run in another terminal:
+## Deployment status
 
-```powershell
-$env:VITE_PUBLIC_DEMO = '0'
-$env:VITE_PUBLIC_RESEARCH = '1'
-$env:DROPDOWN_BASE_URL = 'http://127.0.0.1:8080'
-$env:DROPDOWN_EXTERNAL_SERVER = '1'
-$env:DROPDOWN_RUN = 'local-public-check'
-npm.cmd --prefix frontend run test:browser -- e2e/production-research.spec.mjs
-```
+Existing public application: **https://triallens-tnbc.onrender.com/**.
 
-This checks live registry search, Analyze, actual synthetic planner execution, aggregate research views, desktop/mobile layout and absence of operator controls in Chrome and Edge. Outputs stay ignored. `python scripts/public_release.py` checks the public inventory and writes an ignored JSON inventory under `cache/`, without staging Git changes.
+On **29 October 2026**, the service health endpoint responded successfully, but `/api/research/planner/scenarios` returned 404 and the health response matched the earlier application. The current research release is therefore **not verified as deployed** at that URL.
 
-## Deployment information
+[`Dockerfile`](Dockerfile) and [`render.yaml`](render.yaml) configure the public research server, port 8080, a non-root runtime and `/api/readiness` health checks. Automatic deployment is disabled in the blueprint. Bundled sources/results are image contents; newly fetched registry snapshots are ephemeral and can disappear on restart, redeployment or free-service spin-down. No deployment is performed by updating this README.
 
-The existing public service is https://triallens-tnbc.onrender.com/. Verify the running source revision and endpoints separately. Existing `Dockerfile` and `render.yaml` describe a Node build stage, Python 3.12 runtime, non-root user, `/api/readiness` deployment health check and `PORT` configuration. The container launcher is `python -B -m backend.serve_public`; it starts `backend.research_public:app` with one worker, access logs disabled and forwarded headers ignored. Render terminates TLS; the app does not trust caller-supplied forwarded headers or accept public visitor credentials.
+## Limitations
 
-Bundled sources and aggregate research artifacts are immutable image contents and survive redeployment as part of the image. New search snapshots are ephemeral and disappear on Render restarts, redeploys and free-service spin-down; search again if a snapshot expires. This demo has no cloud persistence for new analyses or patient data. Keeping new searches across restarts would require an explicitly configured persistent store.
+Clinical eligibility remains unvalidated. There is no clinically validated end-to-end patient eligibility screening. Registry text, model proposals, fictional case demonstrations, synthetic policy experiments and archival proxy evaluations are distinct evidence sources. None establishes treatment benefit or clinical eligibility.
 
-Public BYOK is blocked independently of environment toggles. Infrastructure request/error tracing, edge logging and current provider pricing must be verified before changing that boundary. Do not set a server provider key for the public demonstration.
-
-Local startup verification does not establish a successful Docker/Linux build or hosted deployment. The owner must verify those before claiming availability. Repository preparation performs no deployment.
-
-## Limitations and research prototype disclaimer
-
-Clinical eligibility remains unvalidated.
-
-Authored probabilities, costs and examples do not establish clinical calibration, benefit or safety. Missing, conflicting and stale evidence must not be converted into unsupported eligibility assertions. No diagnosis or treatment recommendation is provided.
-
-The controlled NVIDIA Nemotron / Nebius integration produced saved attempts, including structured output rejected by validation. The public showcase retains that failed status and human-review requirement; it is not a clinical accuracy benchmark. Model proposals require source validation and qualified human review. The offline demo uses deterministic calculations, not live model inference.
+Reliability models, probabilities, costs and utility preferences are authored assumptions. Certificates apply only to their stated model sets and risk definitions. Missingness may be informative in real care; the modeled unavailable-report outcome does not capture that. Boolean scope, temporal semantics and evidence sufficiency require qualified review. No real patient upload or patient-level research data is included in the public application.
 
 ## License and attribution
 
 Copyright (c) 2026 Koushik Chowdhury. Other contributors retain their respective rights.
 
-The published project-owned source is licensed under the Mozilla Public License, version 2.0 (MPL-2.0); see LICENSE. Third-party materials retain their own license terms.
+Project-owned source is licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE). Third-party materials retain their own terms; see [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) and [third_party/licenses](third_party/licenses). Retain applicable notices and identify the corresponding source revision when distributing compiled frontend code or containers.
 
-When distributing compiled frontend code or a container, retain the license notices and identify the corresponding source revision.
-
-Third-party terms remain in `THIRD_PARTY_NOTICES.txt` and `third_party/licenses/`. Preserve React, React DOM, Scheduler, Vite and installed Python notices. NVIDIA model and Nebius service terms are separate; no weights, credentials or raw model responses are distributed. Registry attribution remains ClinicalTrials.gov / U.S. National Library of Medicine. No sponsor endorsement is implied.
-
-The [Nebius x NVIDIA Global AI Hackathon official rules](https://nebiusglobalaihackathon.devpost.com/rules) require an open-source repository and an NVIDIA model with qualifying Nebius runtime calls or Nebius AI Cloud execution. This offline demo alone does not establish that requirement. Integration code and saved attempts must not be presented as validated extraction or a deployed Nebius application. Before submission, confirm qualifying runtime evidence, a working demo/test-build link and remaining submission materials.
+Registry sources are attributed to ClinicalTrials.gov / U.S. National Library of Medicine. NVIDIA model and Nebius service terms are separate; no model weights are distributed. No sponsor endorsement is implied. Scientific citations and source provenance remain in the linked research artifacts.
