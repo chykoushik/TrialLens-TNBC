@@ -72,3 +72,24 @@ test('incomplete extraction shows safe validation reasons and keeps validated se
   expect(screen.getByText('Full source coverage: incomplete or unverified.')).toBeVisible()
   expect(fetcher).toHaveBeenCalledTimes(2)
 })
+
+
+
+for (const diagnostics of [undefined, []]) {
+  test(`source-validation failure without diagnostics is explicitly marked (${diagnostics === undefined ? 'missing' : 'empty'})`, async () => {
+    const result = { status: 'incomplete', full_source_coverage_validated: false, sections: [
+      { section: 1, status: 'failed', error: 'source_validation_failed', diagnostics, criteria: [] },
+      { section: 2, status: 'not_requested', criteria: [] },
+    ] }
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result)))
+    vi.stubGlobal('fetch', fetcher)
+    render(<VisitorAnalysis trial={trial} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Run NVIDIA Analysis' }))
+    fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'), { target: { value: 'non-secret-contract-fixture' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve cost and analyze' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server did not provide validation details.')
+    expect(screen.getByText('Section 2: not requested')).toBeVisible()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+}

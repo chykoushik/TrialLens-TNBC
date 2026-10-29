@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from './api'
+import { readRoute, writeRoute, useRoute } from './navigation'
 import { DEMO_STORAGE, loadSession, parseSession } from './demoSession'
 import type { DemoSession } from './demoSession'
 import TrialExplorer from './TrialExplorer'
@@ -64,8 +65,9 @@ export default function App() {
   const [restoreAttempt, setRestoreAttempt] = useState(0)
   const [lastReview, setLastReview] = useState<AppliedReview | null>(null)
   const [advanced, setAdvanced] = useState(false)
-  const [page, setPage] = useState('Home')
-  const [mode, setMode] = useState<Mode>('tnbc')
+  const route = useRoute()
+  const [page, setPage] = useState(() => readRoute().page)
+  const [mode, setMode] = useState<Mode>(() => readRoute().page === 'Research Lab' ? 'research' : 'tnbc')
   const [contexts, setContexts] = useState<Record<Mode, Workspace>>({ tnbc: workspace('tnbc-record-gaps'), research: workspace() })
   const context = contexts[mode]
   const { caseId, algorithm, budget, outcomes, drafts, evidenceId, reviewId } = context
@@ -132,22 +134,24 @@ export default function App() {
     setContexts(previous => ({ ...previous, [mode]: { ...previous[mode], ...change } }))
   }
   function chooseCase(id: string) { if (id !== caseId) update({ caseId: id, outcomes: {}, drafts: {}, evidenceId: null, reviewId: null }) }
-  function navigate(destination: string) {
-    if (destination === 'Real Review' || destination === 'Research Results') { setMobileOpen(false); setPage(destination); focusPage.current = true; return }
+  function navigate(destination: string, record = true) {
+    if (destination === 'Real Review' || destination === 'Research Results') { if (record) writeRoute({ page: destination }); setMobileOpen(false); setPage(destination); focusPage.current = true; return }
     if ((destination === 'Research Lab' && mode !== 'research') || (destination === 'Interactive Demo' && mode !== 'tnbc')) setPendingReview(null)
     const name = destination === 'Overview' ? 'Research overview' : destination
     if (labViews.includes(name) && !(page === 'Interactive Demo' && name !== 'Research overview' && name !== 'Reports & benchmarks')) setPendingReview(null)
     setMobileOpen(false)
     if (labViews.includes(name)) {
       if (page === 'Interactive Demo' && name !== 'Research overview' && name !== 'Reports & benchmarks') setStep(name === 'Patient evidence' ? 1 : name === 'Criterion assessments' ? 2 : 3)
-      else { setLabView(name); setMode('research'); setPage('Research Lab') }
+      else { if (record) writeRoute({ page: 'Research Lab' }); setLabView(name); setMode('research'); setPage('Research Lab') }
     } else {
       if (name === 'Interactive Demo' || name === 'Review Evidence') setMode('tnbc')
       if (name === 'Research Lab') setMode('research')
+      if (record) writeRoute({ page: name })
       setPage(name)
     }
     focusPage.current = true
   }
+  useEffect(() => { navigate(route.page, false) }, [route.page])
   useEffect(() => {
     const controller = new AbortController()
     const signal = controller.signal

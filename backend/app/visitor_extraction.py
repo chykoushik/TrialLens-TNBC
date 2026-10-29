@@ -14,7 +14,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from backend.app.extraction_prompt import CLINICAL_FIELDS, build_messages
+from backend.app.extraction_prompt import CLINICAL_FIELDS, PROMPT_VERSION, build_messages
 from backend.app.extraction_validation import validate_extraction, reanchor_exact_spans
 from backend.app.nebius import BASE_URL, DEFAULT_MODEL, MAX_INPUT_TOKENS, NebiusConfig, NebiusError, pricing
 from backend.app.trial_extraction_api import select_source
@@ -26,6 +26,7 @@ plans = {}
 attempts = {}
 active = set()
 running = {}
+DIAGNOSTICS_VERSION = 1
 KEY_TTL = 300
 OUTPUT_LIMIT = 8192
 MAX_SECTIONS = 24
@@ -293,6 +294,7 @@ async def extract(plan, key, disconnected):
         complete = merged is not None and not errors
         merge_errors = safe_diagnostics(errors)
     return {"status": "complete" if complete else "incomplete",
+            "validation_diagnostics_version": DIAGNOSTICS_VERSION, "extraction_prompt_version": PROMPT_VERSION,
             "sections": results, "merge_diagnostics": merge_errors, "human_review_required": True, "executable_mapping": False,
             "merged_criteria": merged.model_dump(mode="json")["criteria"] if complete else [],
             "full_source_coverage_validated": complete,

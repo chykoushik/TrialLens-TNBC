@@ -1,4 +1,5 @@
 import os
+import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -12,8 +13,16 @@ app = FastAPI(title="TrialLens-TNBC research prototype", docs_url=None, redoc_ur
 app.middleware("http")(public_headers)
 
 
+
+def deployment_metadata():
+    revision = os.environ.get("RENDER_GIT_COMMIT", "")
+    return {"build_revision": revision if re.fullmatch(r"[a-f0-9]{40}", revision) else None,
+            "extraction_prompt_version": visitor_extraction.PROMPT_VERSION,
+            "validation_diagnostics_version": visitor_extraction.DIAGNOSTICS_VERSION}
+
+
 def health():
-    return {"status": "ok", "public_demo": True, "visitor_extraction_enabled": os.environ.get("TRIALLENS_BYOK_ENABLED") == "1",
+    return {**deployment_metadata(), "status": "ok", "public_demo": True, "visitor_extraction_enabled": os.environ.get("TRIALLENS_BYOK_ENABLED") == "1",
             "operator_inference_enabled": False, "storage": "bundled sources plus ephemeral search snapshots"}
 
 
@@ -26,7 +35,7 @@ def readiness():
         ready = False
     if not ready:
         raise HTTPException(503, "Required public research assets are missing.")
-    return {"offline_ready": True, "research_ready": True, "visitor_extraction_enabled": os.environ.get("TRIALLENS_BYOK_ENABLED") == "1",
+    return {**deployment_metadata(), "offline_ready": True, "research_ready": True, "visitor_extraction_enabled": os.environ.get("TRIALLENS_BYOK_ENABLED") == "1",
             "snapshot_persistence": "New searches expire on restart; bundled sources remain available."}
 
 

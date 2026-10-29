@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.research_public import app
@@ -248,3 +249,119 @@ def test_public_unexpected_visitor_errors_never_log_credentials(monkeypatch, cap
     assert response.status_code == 500
     assert response.headers['Cache-Control'] == 'no-store'
     assert 'non-secret-exception-redaction-fixture' not in response.text + caplog.text
+
+
+
+@pytest.mark.parametrize('revision,expected', [('9f16759da60c6af066c653189a5df1c2af5d4507', '9f16759da60c6af066c653189a5df1c2af5d4507'), ('', None), ('private-operational-value', None)])
+def test_public_deployment_metadata_is_safe_and_explicit(monkeypatch, revision, expected):
+    monkeypatch.setenv('RENDER_GIT_COMMIT', revision)
+    for path in ['/api/health', '/api/readiness']:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.json()['build_revision'] == expected
+        assert response.json()['extraction_prompt_version'] == visitor.PROMPT_VERSION
+        assert response.json()['validation_diagnostics_version'] == 1
+        assert 'private-operational-value' not in response.text
+
+
+def numbered_registry_fixture(messages):
+    text = json.loads(messages[-1]['content'])['eligibility_text']
+    heading = text.split('\n', 1)[0]
+    starts = [match.start() for match in re.finditer(r'^\d+\. ', text, re.M)]
+    criteria, evidence = [], []
+    for index, (start, end) in enumerate(zip(starts, starts[1:] + [len(text)])):
+        end = len(text[:end].rstrip('\n'))
+        node = dict.fromkeys(CLINICAL_FIELDS)
+        node.update(criterion_id=f'criterion-{index}', original_text=text[start:end],
+                    criterion_type='inclusion' if heading.startswith('Inclusion') else 'exclusion')
+        criteria.append(node)
+        evidence.append({'criterion_id': node['criterion_id'], 'original_span': {'start': start, 'end': end},
+                         'polarity_span': {'start': 0, 'end': len(heading)}, 'fields': {}})
+    return {'criteria': criteria, 'evidence': evidence}
+
+
+@pytest.mark.parametrize('failure,expected', [(None, None), ('offsets', None),
+    ('numbering', 'partial_top_level_line'), ('atomic', 'unresolved_compound_logic'),
+    ('omitted_cohort', 'uncovered_source_text'), ('numeric_threshold', 'schema_error'),
+    ('missing_field_evidence', 'field_evidence_mismatch'), ('fabricated', 'unsupported_original_text')])
+def test_public_numbered_registry_failures_expose_diagnostic_contract(monkeypatch, failure, expected):
+    visitor.plans.clear(); visitor.attempts.clear(); visitor.active.clear()
+    monkeypatch.setenv('TRIALLENS_BYOK_ENABLED', '1')
+    monkeypatch.setenv('NEBIUS_INPUT_USD_PER_MILLION', '0.30')
+    monkeypatch.setenv('NEBIUS_OUTPUT_USD_PER_MILLION', '0.90')
+    calls = []
+    async def provider(messages, key, disconnected):
+        value = numbered_registry_fixture(messages)
+        calls.append(1)
+        node, entry = value['criteria'][0], value['evidence'][0]
+        if failure == 'offsets':
+            for item in value['evidence']:
+                item['original_span']['start'] += 1
+                item['original_span']['end'] += 1
+        elif failure == 'numbering':
+            node['original_text'] = node['original_text'][3:]
+            entry['original_span']['start'] += 3
+        elif failure == 'atomic':
+            node['logical_operator'] = 'NONE'
+        elif failure == 'omitted_cohort':
+            value['criteria'].pop(); value['evidence'].pop()
+        elif failure == 'numeric_threshold':
+            node['threshold'] = 18
+        elif failure == 'missing_field_evidence':
+            node['threshold'] = '18'
+        elif failure == 'fabricated':
+            node['original_text'] = 'Unsupported clinical claim'
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    trial = client.get('/api/clinical-trials/search', params={'nct_id': 'NCT06774027'}).json()['trials'][0]
+    quote = client.post('/api/visitor-analysis/prepare', json={k:trial[k] for k in ['nct_id','snapshot','snapshot_sha256']}).json()
+    response = client.post('/api/visitor-analysis/run', json={'analysis_id':quote['analysis_id'], 'api_key':'non-secret-contract-fixture',
+        'confirmed':True, 'maximum_cost_usd':quote['maximum_cost_usd']})
+    assert response.status_code == 200
+    result = response.json()
+    assert result['validation_diagnostics_version'] == 1
+    assert result['extraction_prompt_version'] == visitor.PROMPT_VERSION
+    assert result['merge_diagnostics'] == []
+    assert 'non-secret-contract-fixture' not in response.text
+    if expected:
+        assert result['status'] == 'incomplete' and not result['full_source_coverage_validated']
+        assert len(calls) == 1 and result['sections'][1]['status'] == 'not_requested'
+        section = result['sections'][0]
+        assert section['error'] == 'source_validation_failed'
+        assert expected in {item['code'] for item in section['diagnostics']}
+        assert all(set(item) == {'code','message'} for item in section['diagnostics'])
+    else:
+        assert result['status'] == 'complete' and len(calls) == 2
+        assert result['full_source_coverage_validated']
+        assert len(result['merged_criteria']) == 7
+        assert 'Cohort 4:' in result['merged_criteria'][3]['original_text']
+
+
+
+def test_manual_counterfactual_reports_are_not_confused_with_policy_actions():
+    from backend.app.paper_planner import evaluate, Request, cases
+    from research.certified_review_v1.belief import ReusablePosterior
+    case = cases()[0]
+    before = evaluate(Request(scenario=case['id'], budget=1))
+    assert [r['selection_probability'] for r in before['reports']] == [0,0,0,0,0,1]
+    assert all(report['feasible'] for report in before['reports'])
+    with pytest.raises(HTTPException) as rejected:
+        evaluate(Request(scenario=case['id'], budget=1, outcomes={'0':1}))
+    assert rejected.value.status_code == 422
+    after = evaluate(Request(scenario=case['id'], budget=1, manual=True, outcomes={'0':1}))
+    p = ReusablePosterior(case, 1.)
+    assert after['protocol_probabilities'] == pytest.approx(p.stats[(1,-1,-1,-1,-1,-1)][1][p.n:])
+    assert after['manual_counterfactual'] and not after['recommendation_available']
+    assert after['stop_probability'] is None and after['policy_decisions'] == []
+    assert all(row['selection_probability'] == 0 for row in after['reports'])
+    assert not any(row['feasible'] for row in after['reports'])
+    assert after['reports'][0]['unavailable_reason'] == 'Already reviewed.'
+    assert after['reports'][1]['unavailable_reason'] == 'Not enough review budget.'
+    future = evaluate(Request(scenario=case['id'], budget=3, manual=True, outcomes={'0':1}))
+    assert all(row['feasible'] for row in future['reports'][1:])
+    with pytest.raises(HTTPException) as over_budget:
+        evaluate(Request(scenario=case['id'], budget=1, manual=True, outcomes={'0':1,'1':0}))
+    assert over_budget.value.status_code == 422
+    repeat = evaluate(Request(scenario=case['id'], budget=1))
+    assert repeat['expected_policy_metrics'] == before['expected_policy_metrics']
+    assert repeat['reports'] == before['reports']

@@ -1088,3 +1088,5 @@ footer { border-top: 1px solid var(--line); padding-top: 21px; margin: 30px 0 0;
 .planner-summary{display:flex;flex-wrap:wrap;gap:24px;padding:18px;background:#eef5f6;border-radius:10px;color:#183440}
 .research-catalog{padding:24px 0;border-bottom:1px solid #c8d2da}.research-catalog code,.trial-search code{overflow-wrap:anywhere}.paper-planner pre{white-space:pre-wrap;overflow-wrap:anywhere}.research-catalog td{max-width:420px;overflow-wrap:anywhere;min-width:120px}
 @media(max-width:600px){.search-form{display:grid}.search-results article,.analysis-sections article{padding:16px}.planner-summary{display:grid;gap:8px}}
+
+.paper-planner .recommended-report { border: 2px solid #47775d; box-shadow: 0 0 0 2px #47775d22; }

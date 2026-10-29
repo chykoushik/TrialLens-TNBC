@@ -200,6 +200,8 @@
 !/frontend/src/NemotronReview.tsx
 !/frontend/src/OperatorWorkspace.tsx
 !/frontend/src/Overview.tsx
+!/frontend/src/PaperPlanner.test.tsx
+!/frontend/src/navigation.ts
 !/frontend/src/PaperPlanner.tsx
 !/frontend/src/PatientEvidence.test.tsx
 !/frontend/src/PatientEvidence.tsx

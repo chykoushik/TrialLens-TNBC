@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRoute, writeRoute } from './navigation'
 import VisitorAnalysis from './VisitorAnalysis'
 import { api } from './api'
 import { Button } from './ui'
@@ -6,6 +7,7 @@ import type { Trial } from './types'
 
 type Analysis = { extracted_conditions?: { criterion_id: string; original_text: string; criterion_type: string; biomarker?: string; comparator?: string; threshold?: string; unit?: string }[]; source_passages: { text: string; section: string; state: string }[]; saved_extractions: { mode: string; saved_status: string; source_structure_valid: boolean }[]; assessment_available: boolean; scope: string; inference: { explanation: string }; planning: { missing_inputs: string[] } }
 export default function TrialSearch({ trials, research, demo, allowVisitor = true }: { allowVisitor?: boolean; trials: Trial[]; research: () => void; demo: () => void }) {
+  const route = useRoute()
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState('condition')
   const [status, setStatus] = useState('')
@@ -17,20 +19,37 @@ export default function TrialSearch({ trials, research, demo, allowVisitor = tru
   const [error, setError] = useState('')
   const [origin, setOrigin] = useState('Saved ClinicalTrials.gov snapshots')
   async function search(token = '') {
-    setBusy(true); setError(''); setSelected(null); setAnalysis(null)
+    writeRoute({ page: 'Home' }); setBusy(true); setError(''); setSelected(null); setAnalysis(null)
     try {
       const params = new URLSearchParams({ [/^NCT\d{8}$/i.test(query.trim()) ? 'nct_id' : kind]: /^NCT\d{8}$/i.test(query.trim()) ? query.trim().toUpperCase() : query.trim(), status, page_token: token })
       const result = await api<{ trials: Trial[]; next_page_token: string | null; origin: string }>(`/clinical-trials/search?${params}`)
       setMatches(result.trials); setNext(result.next_page_token); setOrigin(result.origin)
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
-  async function analyze() {
-    if (!selected || busy) return
-    setBusy(true); setError('')
-    try { setAnalysis(await api<Analysis>(`/clinical-trials/${selected.nct_id}/analysis?${new URLSearchParams({ snapshot: selected.snapshot, snapshot_sha256: selected.snapshot_sha256 ?? '' })}`)) }
-    catch (e) { setError((e as Error).message) } finally { setBusy(false) }
-  }
-  function back() { setSelected(null); setAnalysis(null); setError('') }
+  useEffect(() => {
+    const controller = new AbortController()
+    if (!/^NCT\d{8}$/.test(route.trial)) { setSelected(null); setAnalysis(null); setBusy(false); return () => controller.abort() }
+    const known = [...(matches ?? []), ...trials].find(item => item.nct_id === route.trial && item.snapshot === route.snapshot)
+    setBusy(!known || route.view === 'analysis'); setError(''); setAnalysis(null); setSelected(known ?? null)
+    async function restore() {
+      let trial = known
+      if (!trial) {
+        const found = await api<{ trials: Trial[] }>(`/clinical-trials/search?${new URLSearchParams({ nct_id: route.trial })}`, undefined, controller.signal)
+        trial = found.trials.find(item => item.snapshot === route.snapshot)
+      }
+      if (!trial) throw new Error('This saved trial is unavailable. Search again to choose a current source.')
+      if (controller.signal.aborted) return
+      setSelected(trial)
+      if (route.view === 'analysis') {
+        const result = await api<Analysis>(`/clinical-trials/${trial.nct_id}/analysis?${new URLSearchParams({ snapshot: trial.snapshot, snapshot_sha256: trial.snapshot_sha256 ?? '' })}`, undefined, controller.signal)
+        if (!controller.signal.aborted) setAnalysis(result)
+      }
+    }
+    void restore().catch(e => { if (!controller.signal.aborted) setError(e.message) }).finally(() => { if (!controller.signal.aborted) setBusy(false) })
+    return () => controller.abort()
+  }, [route.trial, route.snapshot, route.view, trials])
+  function analyze() { if (selected && !busy) writeRoute({ page: 'Home', trial: selected.nct_id ?? '', snapshot: selected.snapshot ?? '', view: 'analysis' }) }
+  function back() { writeRoute({ page: 'Home' }); setSelected(null); setAnalysis(null); setError('') }
   return <section className="trial-search">
     <p className="eyebrow">REAL REGISTRY SOURCES / RESEARCH PROTOTYPE</p>
     <h1>{analysis ? 'Trial analysis results' : selected ? 'Review your selected trial' : 'Understand a clinical trial.'}</h1>
@@ -43,7 +62,7 @@ export default function TrialSearch({ trials, research, demo, allowVisitor = tru
       <Button variant="primary" type="submit" disabled={busy || !query.trim()}>Search trials</Button></form>
       <h2>{matches === null ? 'Or start with a saved study' : 'Search results'}</h2><p>{origin}. Registry status reflects the saved retrieval date.</p>
       {(matches ?? trials).length === 0 && <p>No matching studies. Change your search terms or filters.</p>}
-      <div className="search-results">{(matches ?? trials).filter(trial => trial.is_synthetic !== true).map(trial => <article key={`${trial.nct_id}-${trial.snapshot}`}><p className="eyebrow">{trial.nct_id} · {trial.recruitment_status?.replaceAll('_', ' ')}</p><h3>{trial.title}</h3><p>{trial.conditions.join(', ')}</p>{'phases' in trial && <p>Phase: {(trial.phases as string[]).join(', ') || 'Not reported'}</p>}<p>Saved {trial.retrieved_at ? new Date(trial.retrieved_at).toLocaleDateString() : 'retrieval date unavailable'}</p><Button onClick={() => { setSelected(trial); setError('') }}>Select {trial.nct_id}</Button></article>)}</div>
+      <div className="search-results">{(matches ?? trials).filter(trial => trial.is_synthetic !== true).map(trial => <article key={`${trial.nct_id}-${trial.snapshot}`}><p className="eyebrow">{trial.nct_id} · {trial.recruitment_status?.replaceAll('_', ' ')}</p><h3>{trial.title}</h3><p>{trial.conditions.join(', ')}</p>{'phases' in trial && <p>Phase: {(trial.phases as string[]).join(', ') || 'Not reported'}</p>}<p>Saved {trial.retrieved_at ? new Date(trial.retrieved_at).toLocaleDateString() : 'retrieval date unavailable'}</p><Button onClick={() => { setSelected(trial); setError(''); writeRoute({ page: 'Home', trial: trial.nct_id ?? '', snapshot: trial.snapshot ?? '' }) }}>Select {trial.nct_id}</Button></article>)}</div>
       {next && <Button disabled={busy} onClick={() => void search(next)}>Next results</Button>}
     </> : <><Button onClick={back}>Back to Search</Button><article><p className="eyebrow">{selected.nct_id} · SAVED TRIAL RECORD</p><h2>{selected.title}</h2><p>{selected.recruitment_status?.replaceAll('_', ' ')} · {selected.conditions.join(', ')}</p><a href={selected.source_url ?? undefined} target="_blank" rel="noreferrer">Original ClinicalTrials.gov record</a>
       <details open={!analysis}><summary>Original eligibility requirements</summary><p className="source-text">{selected.eligibility_criteria || 'Eligibility text is not available for this study.'}</p></details>
