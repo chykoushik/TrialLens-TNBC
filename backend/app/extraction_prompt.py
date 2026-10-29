@@ -2,7 +2,7 @@ import json
 
 from backend.app.extraction_source import EligibilitySource
 
-PROMPT_VERSION = "trial-criteria-v2"
+PROMPT_VERSION = "trial-criteria-v3"
 CLINICAL_FIELDS = (
     "criterion_id", "original_text", "criterion_type", "cohort", "logical_operator",
     "dependencies", "biomarker", "assay", "comparator", "threshold", "unit",
@@ -20,7 +20,10 @@ FIELDS. Unknown clinical fields must be explicit null, never guesses.
 criterion_id must be unique. criterion_type is inclusion or exclusion, supported
 by the nearest preceding Inclusion Criteria or Exclusion Criteria heading.
 original_text must be an exact contiguous source substring. Top-level criteria
-must cover complete non-heading lines, with no omissions or overlapping assertions.
+must cover complete non-heading lines, including original numbering, bullets and
+indentation, with no omissions or overlapping assertions. Do not strip line prefixes.
+Offsets refer to the decoded eligibility_text string in THIS request, not the
+JSON encoding, UTF-8 bytes, or a different full-trial request.
 Preserve original negation, numeric bounds, units, timing, and cohort scope.
 Preserve exceptions, conditional rules and cohort-specific requirements in complete
 original_text. If exceptions, ambiguity or unsupported logic cannot be represented
@@ -44,5 +47,5 @@ attaches those directly from the snapshot. Every node requires one evidence entr
 """.replace("FIELDS", ", ".join(CLINICAL_FIELDS)).replace("SPANS", ", ".join(SPAN_FIELDS))
     return [
         {"role": "system", "content": f"Prompt version: {PROMPT_VERSION}\n{instructions}"},
-        {"role": "user", "content": json.dumps({"nct_id": source.nct_id, "eligibility_text": source.text})},
+        {"role": "user", "content": json.dumps({"nct_id": source.nct_id, "eligibility_text": source.text}, ensure_ascii=False)},
     ]

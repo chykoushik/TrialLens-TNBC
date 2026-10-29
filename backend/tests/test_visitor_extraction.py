@@ -326,3 +326,160 @@ def test_two_visitors_cancel_independently(prepared, monkeypatch):
     assert requests.count(KEY) == 1
     assert requests.count('other-visitor-fixture') == 2
     assert not visitor.active and not visitor.running
+
+
+
+def test_nct06774027_exact_quotes_with_wrong_offsets_are_reanchored(monkeypatch):
+    source = visitor.select_source('NCT06774027')
+    units = visitor.sections(source)
+    assert len(units) == 2
+    assert 'Cohort 4:' in units[0]['source'].text
+    assert not any(ord(char) > 127 for char in units[0]['source'].text)
+    calls = []
+    async def provider(messages, key, disconnected):
+        payload = json.loads(content(messages))
+        payload['criteria'][0]['logical_operator'] = None
+        entry = payload['evidence'][0]
+        entry['original_span']['start'] += 1
+        entry['original_span']['end'] += 1
+        entry['polarity_span'] = {'start': 1, 'end': 2}
+        raw = json.dumps(payload)
+        section = units[len(calls)]['source']
+        _, errors = visitor.validate_extraction(raw, section, method='fixture', timestamp='2026-10-29T00:00:00Z', allow_unresolved_logic=True)
+        assert 'unsupported_original_text' in {error['code'] for error in errors}
+        calls.append(1)
+        return raw
+    monkeypatch.setattr(visitor, 'provider', provider)
+    plan = {'source': source, 'units': units, 'quote': {'maximum_cost_usd': '0.1'}}
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert len(calls) == 2 and result['status'] == 'complete'
+    assert all(section['exact_offsets_reanchored'] for section in result['sections'])
+    for section in result['sections']:
+        for node, evidence in zip(section['criteria'], section['source_evidence']):
+            span = evidence['original_span']
+            assert source.text[span['start']:span['end']] == node['original_text']
+    assert 'Cohort 4:' in result['merged_criteria'][0]['original_text']
+    assert result['merged_criteria'][0]['logical_operator'] is None
+
+
+@pytest.mark.parametrize('failure,expected', [
+    ('quotation', 'unsupported_original_text'), ('numbering', 'partial_top_level_line'),
+    ('schema', 'invalid_json_or_schema'), ('logic', 'unresolved_compound_logic'),
+    ('field', 'unsupported_field'), ('duplicate', 'invalid_json_or_schema'),
+])
+def test_validation_diagnostics_reject_unsupported_output_and_stop(prepared, monkeypatch, failure, expected):
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        value = json.loads(content(messages))
+        node, entry = value['criteria'][0], value['evidence'][0]
+        if failure == 'quotation':
+            node['original_text'] = 'non-secret-hallucinated-fixture'
+        elif failure == 'numbering':
+            node['original_text'] = node['original_text'][1:]
+            entry['original_span']['start'] += 1
+        elif failure == 'schema':
+            node['non-secret-private-field-fixture'] = KEY
+        elif failure == 'logic':
+            node['original_text'] = 'marker present AND assay positive'
+        elif failure == 'field':
+            node['biomarker'] = 'unsupported-biomarker'
+            entry['fields']['biomarker'] = {'start': 0, 'end': 1}
+        raw = json.dumps(value)
+        if failure == 'duplicate':
+            raw = raw.replace('"criteria":', '"criteria": [], "criteria":', 1)
+        return raw
+    if failure == 'logic':
+        body, path = prepared
+        payload = json.loads(path.read_text())
+        payload['studies'][0]['protocolSection']['eligibilityModule']['eligibilityCriteria'] = 'Inclusion Criteria:\nmarker present AND assay positive\nExclusion Criteria:\ncondition present'
+        path.write_text(json.dumps(payload))
+        body['snapshot_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setattr(visitor, 'provider', provider)
+    result = client.post('/visitor-analysis/run', json=approval(quote(prepared[0]))).json()
+    assert result['status'] == 'incomplete' and len(calls) == 1
+    section = result['sections'][0]
+    assert section['error'] == 'source_validation_failed'
+    assert expected in {item['code'] for item in section['diagnostics']}
+    assert result['sections'][1]['status'] == 'not_requested'
+    assert KEY not in json.dumps(result)
+    assert 'non-secret-private-field-fixture' not in json.dumps(result)
+
+
+def test_exact_reanchoring_rejects_ambiguous_and_normalized_quotes(prepared):
+    from backend.app.extraction_validation import reanchor_exact_spans
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    for text, quotation in [('Inclusion Criteria:\nrepeat\nrepeat', 'repeat'),
+                            ('Inclusion Criteria:\nCafe\u0301 \u2265 18 \U0001f9ec', 'Caf\u00e9 \u2265 18 \U0001f9ec')]:
+        source = replace(source, text=text)
+        value = json.loads(content(visitor.build_messages(source)))
+        value['criteria'][0]['original_text'] = quotation
+        value['evidence'][0]['original_span'] = {'start': 0, 'end': 1}
+        recovered = reanchor_exact_spans(json.dumps(value), source)
+        _, errors = visitor.validate_extraction(recovered, source, method='fixture', timestamp='2026-10-29T00:00:00Z', allow_unresolved_logic=True)
+        assert 'unsupported_original_text' in {error['code'] for error in errors}
+
+
+def test_unicode_byte_offsets_reanchor_to_python_characters(prepared):
+    from backend.app.extraction_validation import reanchor_exact_spans
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    source = replace(source, text='Inclusion Criteria:\n* Caf\u00e9 \U0001f9ec \u2265 18')
+    assert '\u2265' in visitor.build_messages(source)[-1]['content']
+    value = json.loads(content(visitor.build_messages(source)))
+    node, entry = value['criteria'][0], value['evidence'][0]
+    node['threshold'] = '18'
+    entry['original_span']['end'] = len(source.text.encode())
+    entry['fields']['threshold'] = {'start': len(source.text.encode()) - 2, 'end': len(source.text.encode())}
+    recovered = reanchor_exact_spans(json.dumps(value), source)
+    model, errors = visitor.validate_extraction(recovered, source, method='fixture', timestamp='2026-10-29T00:00:00Z', allow_unresolved_logic=True)
+    assert model is not None and not errors
+    assert model.criteria[0].original_text == node['original_text']
+
+
+
+def test_nested_exact_reanchoring_preserves_dependencies(prepared):
+    from backend.app.extraction_validation import reanchor_exact_spans
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    source = replace(source, text='Inclusion Criteria:\n* marker present AND assay positive')
+    value = json.loads(content(visitor.build_messages(source)))
+    parent = value['criteria'][0]
+    children = []
+    for i, original in enumerate(['marker present', 'assay positive']):
+        node = dict.fromkeys(CLINICAL_FIELDS)
+        node.update(criterion_id=f'child-{i}', original_text=original, criterion_type='inclusion', logical_operator='NONE')
+        children.append(node)
+        value['evidence'].append({'criterion_id': node['criterion_id'], 'original_span': {'start': 0, 'end': 1},
+                                  'polarity_span': {'start': 1, 'end': 2}, 'fields': {}})
+    parent.update(logical_operator='AND', dependencies=children)
+    value['evidence'][0]['original_span'] = {'start': 0, 'end': 1}
+    recovered = reanchor_exact_spans(json.dumps(value), source)
+    assert json.loads(recovered)['criteria'] == value['criteria']
+    model, errors = visitor.validate_extraction(recovered, source, method='fixture', timestamp='2026-10-29T00:00:00Z', allow_unresolved_logic=True)
+    assert not errors and len(model.criteria[0].dependencies) == 2
+
+
+def test_validation_failure_retains_previous_section_and_merge_reason(prepared, monkeypatch):
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    plan = {'source': source, 'units': visitor.sections(source), 'quote': {'maximum_cost_usd': '0.1'}}
+    async def provider(messages, key, disconnected):
+        payload = json.loads(content(messages))
+        if payload['criteria'][0]['criterion_type'] == 'exclusion':
+            payload['criteria'][0]['original_text'] = 'invented quotation'
+        return json.dumps(payload)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert result['status'] == 'incomplete' and result['sections'][0]['criteria']
+    assert result['sections'][1]['diagnostics'][0]['code'] == 'unsupported_original_text'
+    validate = visitor.validate_extraction
+    def failed_merge(*args, **kwargs):
+        if kwargs['method'] == 'visitor-merged-v1':
+            return None, [{'code': 'lost_cohort_scope', 'criterion_id': KEY, 'field': KEY}]
+        return validate(*args, **kwargs)
+    async def valid(messages, *args):
+        return content(messages)
+    monkeypatch.setattr(visitor, 'provider', valid)
+    monkeypatch.setattr(visitor, 'validate_extraction', failed_merge)
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert result['status'] == 'incomplete' and all(s['status'] == 'validated' for s in result['sections'])
+    assert result['merge_diagnostics'] == [{'code': 'lost_cohort_scope', 'message': visitor.VALIDATION_REASONS['lost_cohort_scope']}]
+    assert KEY not in json.dumps(result)

@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from backend.app.extraction_prompt import CLINICAL_FIELDS, build_messages
-from backend.app.extraction_validation import validate_extraction
+from backend.app.extraction_validation import validate_extraction, reanchor_exact_spans
 from backend.app.nebius import BASE_URL, DEFAULT_MODEL, MAX_INPUT_TOKENS, NebiusConfig, NebiusError, pricing
 from backend.app.trial_extraction_api import select_source
 import httpx
@@ -188,7 +188,11 @@ async def provider(messages, key, disconnected):
         content = choice["message"]["content"]
         if not isinstance(content, str) or not content.strip():
             raise NebiusError("invalid_response")
-        if key in content or key in json.dumps(json.loads(content), ensure_ascii=False):
+        try:
+            decoded = json.loads(content)
+        except (ValueError, RecursionError):
+            raise NebiusError("invalid_structured_json") from None
+        if key in content or key in json.dumps(decoded, ensure_ascii=False):
             raise NebiusError("credential_echo_redacted")
         return content
     except httpx.TimeoutException:
@@ -199,6 +203,37 @@ async def provider(messages, key, disconnected):
         raise NebiusError("invalid_response") from None
 
 
+VALIDATION_REASONS = {
+    "schema_error": "The model response does not match the required criteria and evidence schema.",
+    "invalid_json_or_schema": "The model response is not valid, unique-key structured criteria JSON.",
+    "unsupported_original_text": "A quotation does not match the exact source text and character offsets.",
+    "unsupported_field": "A structured field is not supported by an exact source quotation.",
+    "field_evidence_mismatch": "A structured field is missing its required source evidence.",
+    "unsupported_polarity": "An inclusion or exclusion label is not supported by its section heading.",
+    "partial_top_level_line": "A criterion omits part of a source line, such as its numbering or bullet.",
+    "uncovered_source_text": "The response omits source text; full section coverage cannot be validated.",
+    "missing_evidence": "A criterion is missing source evidence.",
+    "unexpected_evidence": "The response contains evidence without a corresponding criterion.",
+    "dependency_outside_parent": "A nested condition extends outside its parent source quotation.",
+    "lost_cohort_scope": "A nested condition lost its parent cohort scope.",
+    "crosses_section_boundary": "A criterion crosses an inclusion or exclusion section boundary.",
+    "partial_numeric_threshold": "A numeric bound quotes only part of a source number.",
+    "partial_comparator": "A comparator quotes only part of a source comparison operator.",
+    "missing_dependency_evidence": "A nested condition is missing source evidence.",
+    "overlapping_or_unordered_operands": "Nested source quotations overlap or are out of order.",
+    "unsupported_logical_structure": "The proposed AND/OR dependencies do not match the source logic.",
+    "unresolved_compound_logic": "A compound condition was marked atomic without supported dependencies.",
+    "unsupported_conditional_or_exception": "A conditional or exception requires unresolved logic and human review.",
+    "unresolved_logical_operator": "A logical relationship remains unresolved.",
+    "overlapping_top_level_criteria": "Top-level source quotations overlap.",
+}
+
+
+def safe_diagnostics(errors):
+    codes = dict.fromkeys(error.get("code") for error in errors)
+    return [{"code": code, "message": VALIDATION_REASONS[code]} for code in codes if code in VALIDATION_REASONS]
+
+
 async def extract(plan, key, disconnected):
     results = []
     requests_sent = 0
@@ -206,10 +241,16 @@ async def extract(plan, key, disconnected):
     for index, unit in enumerate(plan["units"]):
         if disconnected.is_set() or time.monotonic() >= plan.get("key_deadline", float("inf")):
             break
+        errors = []
+        offsets_reanchored = False
         try:
             requests_sent += 1
             content = await provider(unit["messages"], key, disconnected)
             model, errors = validate_extraction(content, unit["source"], method="visitor-section-v1", timestamp=timestamp, allow_unresolved_logic=True)
+            if errors and not any(error["code"] in ("schema_error", "invalid_json_or_schema") for error in errors):
+                content = reanchor_exact_spans(content, unit["source"])
+                offsets_reanchored = True
+                model, errors = validate_extraction(content, unit["source"], method="visitor-section-v1", timestamp=timestamp, allow_unresolved_logic=True)
             if model is None or errors:
                 raise NebiusError("source_validation_failed")
             evidence = json.loads(content)["evidence"]
@@ -228,13 +269,17 @@ async def extract(plan, key, disconnected):
             identify(criteria)
             results.append({"section": index + 1, "status": "validated", "source_start": unit["source_start"],
                             "source_end": unit["source_end"], "source_evidence": evidence,
+                            "exact_offsets_reanchored": offsets_reanchored,
                             "criteria": criteria})
         except NebiusError as error:
-            results.append({"section": index + 1, "status": "failed", "error": error.code, "criteria": []})
+            if error.code == "invalid_structured_json":
+                errors = [{"code": "invalid_json_or_schema"}]
+            results.append({"section": index + 1, "status": "failed", "error": error.code, "diagnostics": safe_diagnostics(errors), "criteria": []})
             break
     results.extend({"section": i + 1, "status": "not_requested", "criteria": []} for i in range(len(results), len(plan["units"])))
     complete = bool(results) and all(r["status"] == "validated" for r in results)
     merged = None
+    merge_errors = []
     if complete:
         def clinical(node):
             value = {name: node[name] for name in CLINICAL_FIELDS}
@@ -246,8 +291,9 @@ async def extract(plan, key, disconnected):
         merged, errors = validate_extraction(json.dumps(combined), plan["source"], method="visitor-merged-v1",
                                             timestamp=timestamp, allow_unresolved_logic=True)
         complete = merged is not None and not errors
+        merge_errors = safe_diagnostics(errors)
     return {"status": "complete" if complete else "incomplete",
-            "sections": results, "human_review_required": True, "executable_mapping": False,
+            "sections": results, "merge_diagnostics": merge_errors, "human_review_required": True, "executable_mapping": False,
             "merged_criteria": merged.model_dump(mode="json")["criteria"] if complete else [],
             "full_source_coverage_validated": complete,
             "maximum_cost_usd": plan["quote"]["maximum_cost_usd"], "planned_requests": len(plan["units"]),

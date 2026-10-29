@@ -49,3 +49,26 @@ test('failure is generic and requires a new approval; disconnect clears the key'
   fireEvent.click(screen.getByRole('button', { name: 'Remove Key Now' }))
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
+
+
+
+test('incomplete extraction shows safe validation reasons and keeps validated sections', async () => {
+  const result = { status: 'incomplete', full_source_coverage_validated: false, sections: [
+    { section: 1, status: 'validated', criteria: [{ criterion_id: 'first', original_text: 'Retained source quotation', logical_operator: null }] },
+    { section: 2, status: 'failed', error: 'source_validation_failed', diagnostics: [{ code: 'unsupported_original_text', message: 'A quotation does not match the exact source text and character offsets.' }], criteria: [] },
+    { section: 3, status: 'not_requested', criteria: [] },
+  ], merge_diagnostics: [{ code: 'lost_cohort_scope', message: 'A nested condition lost its parent cohort scope.' }] }
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result)))
+  vi.stubGlobal('fetch', fetcher)
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Run NVIDIA Analysis' }))
+  fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'), { target: { value: 'non-secret-test-credential' } })
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve cost and analyze' }))
+  expect(await screen.findByText('Retained source quotation')).toBeVisible()
+  expect(screen.getByText(/A quotation does not match/)).toBeVisible()
+  expect(screen.getByText(/Combined source validation: A nested condition/)).toBeVisible()
+  expect(screen.getByText('Section 3: not requested')).toBeVisible()
+  expect(screen.getByText('Full source coverage: incomplete or unverified.')).toBeVisible()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})

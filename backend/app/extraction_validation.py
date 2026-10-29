@@ -227,3 +227,49 @@ def validate_extraction(
     if set(evidence) - used:
         report("unexpected_evidence")
     return (None if errors else criteria_set), errors
+
+
+
+def reanchor_exact_spans(content: str, source: EligibilitySource) -> str:
+    payload = json.loads(content, object_pairs_hook=unique_object)
+    parsed = ExtractionResponse.model_validate(payload)
+    evidence = {entry["criterion_id"]: entry for entry in payload["evidence"]}
+    if len(evidence) != len(parsed.evidence):
+        return content
+
+    def locate(quotation, supplied, start, end):
+        if not isinstance(quotation, str) or not quotation:
+            return supplied
+        if start <= supplied["start"] < supplied["end"] <= end and source.text[supplied["start"]:supplied["end"]] == quotation:
+            return supplied
+        first = source.text.find(quotation, start, end)
+        if first < 0 or source.text.find(quotation, first + 1, end) >= 0:
+            return supplied
+        return {"start": first, "end": first + len(quotation)}
+
+    headings = list(re.finditer(
+        r"^[ \t]*(?:#+[ \t]*)?(Inclusion|Exclusion)(?:[ \t]+Criteria)?[ \t]*:?[ \t]*$",
+        source.text, re.M | re.I))
+
+    def visit(nodes, start=0, end=None):
+        end = len(source.text) if end is None else end
+        for node in nodes:
+            entry = evidence.get(node["criterion_id"])
+            if entry is None:
+                continue
+            span = locate(node["original_text"], entry["original_span"], start, end)
+            entry["original_span"] = span
+            a, b = span["start"], span["end"]
+            if not start <= a < b <= end or source.text[a:b] != node["original_text"]:
+                continue
+            preceding = [heading for heading in headings if heading.end() <= a]
+            if preceding:
+                heading = preceding[-1]
+                entry["polarity_span"] = {"start": heading.start(), "end": heading.end()}
+            for field, supporting in entry["fields"].items():
+                if field in SPAN_FIELDS:
+                    entry["fields"][field] = locate(node.get(field), supporting, a, b)
+            visit(node["dependencies"] or [], a, b)
+
+    visit(payload["criteria"])
+    return json.dumps(payload, ensure_ascii=False)

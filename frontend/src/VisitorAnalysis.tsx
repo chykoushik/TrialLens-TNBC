@@ -11,7 +11,9 @@ function Condition({ node }: { node: Criterion }) {
   return <section><blockquote>{node.original_text}</blockquote><dl>{fields.map(([field, value]) => <div key={field}><dt>{field.replaceAll('_', ' ')}</dt><dd>{value == null ? 'Unresolved / not extracted' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>{!node.logical_operator && <p>Logical relationship unresolved: human review required.</p>}{node.dependencies?.map(child => <Condition key={child.criterion_id} node={child} />)}</section>
 }
 
-type Result = { full_source_coverage_validated?: boolean; status: string; human_review_required: boolean; sections: { section: number; status: string; error?: string; criteria: Criterion[] }[] }
+type Diagnostic = { code: string; message: string }
+
+type Result = { merge_diagnostics?: Diagnostic[]; full_source_coverage_validated?: boolean; status: string; human_review_required: boolean; sections: { section: number; status: string; error?: string; diagnostics?: Diagnostic[]; criteria: Criterion[] }[] }
 
 export default function VisitorAnalysis({ trial }: { trial: Trial }) {
   const [open, setOpen] = useState(false)
@@ -85,7 +87,8 @@ export default function VisitorAnalysis({ trial }: { trial: Trial }) {
         <Button disabled={busy || !confirmed || !key.trim()} onClick={() => void run()}>Approve cost and analyze</Button></>}
       <Button onClick={() => { removeKey(); setOpen(false) }}>Remove Key Now</Button>
       {result && <article><h3>NVIDIA extraction: {result.status}</h3><p>Full source coverage: {result.full_source_coverage_validated ? 'validated' : 'incomplete or unverified'}.</p><p>Automatic source and structure checks only. Clinical review is required; these are not executable mappings or patient eligibility findings.</p>
-        {result.sections.map(section => <section key={section.section}><h4>Section {section.section}: {section.status.replaceAll('_', ' ')}</h4>{section.error && <p>{section.error.replaceAll('_', ' ')}. Processing and billing may have occurred; no retry was made.</p>}{section.criteria.map(node => <div key={node.criterion_id}><Condition node={node} /><p>Coverage: source validated. Unresolved conditions require human review.</p></div>)}</section>)}
+        {result.merge_diagnostics?.map(item => <p role="alert" key={item.code}>Combined source validation: {item.message}</p>)}
+        {result.sections.map(section => <section key={section.section}><h4>Section {section.section}: {section.status.replaceAll('_', ' ')}</h4>{section.error && <p>{section.error.replaceAll('_', ' ')}. Processing and billing may have occurred; no retry was made.</p>}{section.diagnostics?.map(item => <p key={item.code}>{item.message}</p>)}{section.criteria.map(node => <div key={node.criterion_id}><Condition node={node} /><p>Coverage: source validated. Unresolved conditions require human review.</p></div>)}</section>)}
       </article>}
     </div>}
   </section>
