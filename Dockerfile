@@ -3,6 +3,8 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
+COPY results/prioritization/coherent/20261025-imperfect-analysis-v1/report.md /app/results/prioritization/coherent/20261025-imperfect-analysis-v1/report.md
+COPY results/prioritization/sensitivity/20261025-final/report.md /app/results/prioritization/sensitivity/20261025-final/report.md
 ENV VITE_PUBLIC_DEMO=0
 ENV VITE_PUBLIC_RESEARCH=1
 ENV VITE_API_BASE_URL=/api

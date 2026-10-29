@@ -6,6 +6,47 @@ from backend import serve_public
 from scripts import public_release
 
 
+def test_frontend_docker_stage_contains_raw_report_imports():
+    import posixpath
+    import re
+    import shlex
+
+    root = Path(__file__).resolve().parents[2]
+    copies = []
+    workdir = '/'
+    for line in (root / 'Dockerfile').read_text().splitlines():
+        if line == 'RUN npm run build':
+            break
+        if line.startswith('WORKDIR '):
+            workdir = line.split()[1]
+        if line.startswith('COPY '):
+            _, source, destination = shlex.split(line)
+            copies.append((source, posixpath.normpath(posixpath.join(workdir, destination))))
+    else:
+        pytest.fail('Missing frontend build step')
+
+    component = root / 'frontend/src/ResearchReports.tsx'
+    imports = re.findall(r"import\('([^']+)\?raw'\)", component.read_text())
+    assert imports
+    for relative in imports:
+        target = posixpath.normpath(posixpath.join(workdir, 'src', relative))
+        available = False
+        for source, destination in copies:
+            for path in root.glob(source):
+                if path.is_dir() and target.startswith(destination + '/'):
+                    path = path / target[len(destination) + 1:]
+                elif path.is_dir() or destination != target:
+                    continue
+                if path.is_file():
+                    parts = path.relative_to(root).parts
+                    parent = root
+                    for part in parts:
+                        assert part in {child.name for child in parent.iterdir()}
+                        parent /= part
+                    available = True
+        assert available, f'Frontend Docker stage lacks {target}'
+
+
 @pytest.mark.parametrize('port', ['8080', '10000', '1', '65535'])
 def test_public_launcher_reads_only_port(monkeypatch, port):
     class Environment(dict):
