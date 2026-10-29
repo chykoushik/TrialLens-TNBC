@@ -1,4 +1,5 @@
 # TrialLens-TNBC
+Application: https://triallens-tnbc.onrender.com/.
 
 TrialLens-TNBC investigates **risk-constrained adaptive evidence review for clinical trial eligibility**, motivated by triple-negative breast cancer (TNBC). Given logical eligibility requirements, uncertain reports and a limited review budget, it asks which existing evidence to review next and when to abstain.
 
