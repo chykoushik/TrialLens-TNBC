@@ -77,7 +77,7 @@ def test_explicit_aggregate_approval_sections_replay_and_no_persistence(prepared
     assert client.post('/visitor-analysis/run', json=approval(value, confirmed=False)).status_code == 422
     assert client.post('/visitor-analysis/run', json=approval(value, maximum_cost_usd='100')).status_code == 409
     result = client.post('/visitor-analysis/run', json=approval(value))
-    assert result.status_code == 200 and result.json()['status'] == 'complete'
+    assert result.status_code == 200 and result.json()['status'] == 'review_required'
     assert len(calls) == 2 and not result.json()['executable_mapping']
     assert result.headers['cache-control'] == 'no-store'
     source_text = visitor.select_source(body['nct_id'], body['snapshot']).text
@@ -321,7 +321,7 @@ def test_two_visitors_cancel_independently(prepared, monkeypatch):
         with pytest.raises(HTTPException):
             await a
         result = await b
-        assert result['status'] == 'complete'
+        assert result['status'] == 'review_required'
     asyncio.run(scenario())
     assert requests.count(KEY) == 1
     assert requests.count('other-visitor-fixture') == 2
@@ -672,7 +672,8 @@ def test_numbered_boolean_dependencies_validate_without_dropping_number_prefix(p
         row.update(quotation=quote,logical_operator=operator,dependencies=dependencies);return row
     value['interpretations'][0].update(logical_operator='AND',dependencies=[child('A'),child('(B OR C)','OR',[child('B'),child('C')])])
     nodes,evidence,ledger,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
-    assert not errors and ledger[0]['interpretation_status']=='validated'
+    assert not errors and ledger[0]['interpretation_status']=='unresolved'
+    assert nodes[0]['logical_operator']=='AND'
     assert nodes[0]['original_text']=='1. A AND (B OR C)'
     assert nodes[0]['dependencies'][1]['dependencies'][1]['original_text']=='C'
     for item in evidence:
@@ -727,8 +728,8 @@ def test_source_first_atomic_sections_merge_exactly_without_model_source_copy(pr
         return json.dumps(source_meaning(messages))
     monkeypatch.setattr(visitor,'provider',provider)
     result=asyncio.run(visitor.extract({'source':source,'units':visitor.sections(source),'quote':{'maximum_cost_usd':'0.1'}},KEY,asyncio.Event()))
-    assert len(calls)==2 and result['status']=='complete'
-    assert result['interpretation_complete'] and result['full_source_coverage_validated']
+    assert len(calls)==2 and result['status']=='review_required'
+    assert not result['interpretation_complete'] and result['full_source_coverage_validated']
     assert result['human_review_required'] and not result['executable_mapping']
     assert [n['original_text'] for n in result['merged_criteria']]==['1. Age \u226518 years','1. Prior surgery']
     for section in result['sections']:
@@ -807,7 +808,7 @@ def test_saved_nct06774027_numeric_interpretations_reach_merged_results(monkeypa
     assert result['merged_criteria'][0]['logical_operator'] is None
     assert result['merged_criteria'][1]['threshold'] == '3'
     assert result['merged_criteria'][1]['unit'] == 'months'
-    assert result['source_passages'][0]['field_status']['threshold'] == 'retained'
+    assert 'field_status' not in result['source_passages'][0]
 
 
 def test_supported_field_survives_another_rejected_field_without_validating_the_section(prepared, monkeypatch):
@@ -825,7 +826,7 @@ def test_supported_field_survives_another_rejected_field_without_validating_the_
     node = result['sections'][0]['criteria'][0]
     assert node['threshold'] == '18' and node['unit'] == 'years' and node['assay'] is None
     assert result['source_passages'][0]['interpretation_status'] == 'unsupported'
-    assert result['source_passages'][0]['field_status']['assay'] == 'unsupported_evidence'
+    assert 'field_status' not in result['source_passages'][0]
     assert any(d.get('field') == 'assay' for d in result['sections'][0]['diagnostics'])
 
 
@@ -849,8 +850,8 @@ def test_null_numeric_fields_are_not_invented_and_ambiguous_cohort_fields_are_ex
     value['interpretations'][3].update(cohort='Cohort 1', biomarker='HR+', threshold='1')
     nodes, _, ledger, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
     assert not errors
-    assert nodes[0]['threshold'] is None
-    assert ledger[0]['field_status']['threshold'] == 'not_extracted_or_not_applicable'
+    assert nodes[0]['threshold'] == '18'
+    assert ledger[0]['field_origin']['threshold'] == 'literal_source_rule'
     cohort = next(n for n in nodes if 'Cohort 4:' in n['original_text'])
     assert cohort['cohort'] is None and cohort['biomarker'] is None and cohort['threshold'] is None
     assert ledger[3]['field_status']['threshold'] == 'withheld_ambiguous_scope_or_boundary'
@@ -887,3 +888,149 @@ def test_exact_substring_that_fails_numeric_validation_is_not_reported_retained(
     assert not nodes and any(error['code'] == 'partial_numeric_threshold' for error in errors)
     assert ledger[0]['field_status']['threshold'] == 'not_retained_validation_failed'
     assert 'retained' not in ledger[0]['field_status'].values()
+
+
+
+def test_all_null_model_output_preserves_literal_facts_without_claiming_model_or_clinical_success(monkeypatch):
+    source = visitor.select_source('NCT06774027')
+    async def provider(messages, key, disconnected):
+        return json.dumps(source_meaning(messages))
+    monkeypatch.setattr(visitor, 'provider', provider)
+    plan = {'source': source, 'units': visitor.sections(source), 'quote': {'maximum_cost_usd':'0.1'}, 'debug': True}
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert result['full_source_coverage_validated'] and not result['interpretation_complete']
+    assert result['literal_source_rules_used'] and result['status'] == 'review_required'
+    assert len(result['merged_criteria']) == 7
+    assert result['merged_criteria'][0]['threshold'] == '18'
+    assert result['merged_criteria'][1]['threshold'] == '3'
+    stats = result['debug_diagnostics']['sections']
+    assert sum(s['model_fields_received'] for s in stats) == 0
+    assert sum(s['fields_null'] for s in stats) == 49
+    assert sum(s['model_fields_accepted'] for s in stats) == 0
+    assert sum(s['deterministic_fields_accepted'] for s in stats) == 6
+    assert not result['executable_mapping']
+
+
+@pytest.mark.parametrize('text', [
+    'Age under 18 years', 'Age >=18 years unless waived', 'Not aged 18 years or greater',
+    'Age between 18 and 65 years', 'Age >=18 years or age >=21 years', '1. Age >=1 years',
+    'Life expectancy unknown', 'Age greater than eighteen years',
+])
+def test_literal_rules_abstain_on_unsupported_or_ambiguous_wording(text):
+    from backend.app.source_interpretation import literal_fields
+    assert not literal_fields({'text':text,'scope_ambiguous':False,'boundary_ambiguous':False})
+
+
+def test_literal_rules_do_not_mix_with_conflicting_model_values(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']),text='Inclusion Criteria:\nAge >=18 years; review after 20 days')
+    passages=inventory(source);value=source_meaning(messages(source,passages))
+    value['interpretations'][0]['threshold']='20'
+    nodes,_,records,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not errors and nodes[0]['comparator'] is None and nodes[0]['unit'] is None
+    assert records[0]['field_origin']['threshold']=='model'
+
+
+def test_safe_diagnostic_counts_identify_missing_unknown_and_withheld_fields():
+    from backend.app.source_interpretation import diagnostic_counts
+    fields = dict.fromkeys(['cohort','biomarker','assay','comparator','threshold','unit','temporal_constraint','dependencies'])
+    item = dict(fields,source_id='not-known',logical_operator='NONE',threshold='999',unit='years')
+    passages=[{'source_id':'source-0-10','scope_ambiguous':False,'boundary_ambiguous':False}]
+    stats=diagnostic_counts(json.dumps({'interpretations':[item]}),passages,[],[],[{'code':'unknown_source_segment'}])
+    assert stats['model_fields_received']==2 and stats['fields_rejected']==2
+    assert stats['fields_matched_to_passages']==0 and stats['fields_missing']==7
+    assert '999' not in json.dumps(stats) and 'not-known' not in json.dumps(stats)
+    item['source_id']='source-0-10';passages[0]['scope_ambiguous']=True
+    stats=diagnostic_counts(json.dumps({'interpretations':[item]}),passages,[],[],[])
+    assert stats['fields_withheld']==2 and stats['fields_rejected']==0
+
+
+def test_debug_requires_explicit_enablement_and_operator_authentication(prepared,monkeypatch):
+    calls=[]
+    async def provider(messages,key,disconnected):
+        calls.append(1);return json.dumps(source_meaning(messages))
+    monkeypatch.setattr(visitor,'provider',provider)
+    value=quote(prepared[0]);body=approval(value)
+    monkeypatch.delenv('TRIALLENS_EXTRACTION_DEBUG',raising=False)
+    assert client.post('/visitor-analysis/run',json=body,headers={'X-TrialLens-Debug':'1'}).status_code==403
+    monkeypatch.setenv('TRIALLENS_EXTRACTION_DEBUG','1')
+    monkeypatch.setenv('TRIALLENS_OPERATOR_TOKEN','non-secret-debug-operator-0123456789')
+    assert client.post('/visitor-analysis/run',json=body,headers={'X-TrialLens-Debug':'1'}).status_code==401
+    assert calls==[]
+    response=client.post('/visitor-analysis/run',json=body,headers={'X-TrialLens-Debug':'1','Authorization':'Bearer non-secret-debug-operator-0123456789'})
+    assert response.status_code==200 and 'debug_diagnostics' in response.json()
+    assert KEY not in json.dumps(response.json()['debug_diagnostics'])
+    public=client.post('/visitor-analysis/run',json=approval(quote(prepared[0]))).json()
+    assert 'debug_diagnostics' not in public
+    assert all('field_status' not in p and 'field_origin' not in p for p in public['source_passages'])
+
+
+
+def test_bad_dependency_evidence_keeps_valid_root_fields_but_rejects_section(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret, diagnostic_counts
+    source=replace(visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot']),text='Inclusion Criteria:\n1. Age >=18 years AND marker present')
+    passages=inventory(source);value=source_meaning(messages(source,passages))
+    child=dict(value['interpretations'][0]);child.pop('source_id');child.update(quotation='invented dependency')
+    value['interpretations'][0].update(threshold='18',unit='years',logical_operator='AND',dependencies=[child,child])
+    nodes,evidence,records,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert errors and nodes[0]['threshold']=='18' and nodes[0]['logical_operator'] is None
+    assert nodes[0]['dependencies'] is None and len(evidence)==1
+    counts=diagnostic_counts(json.dumps(value),passages,nodes,records,errors)
+    assert counts['model_fields_received']==2 and counts['model_fields_accepted']==2
+    assert counts['fields_accepted']>=2 and counts['evidence_matching_failures']==1
+    assert records[0]['interpretation_status']=='unsupported'
+
+
+
+@pytest.mark.parametrize('text,number,unit', [
+    ('Age >=18 years','18','years'), ('Age \u226518 years','18','years'),
+    ('Life expectancy \u22653 months','3','months'), ('Estimated life expectancy of at least at 3 months per investigator assessment.','3','months'),
+])
+def test_literal_source_rules_preserve_exact_numeric_fact_and_offsets(prepared,text,number,unit):
+    from backend.app.source_interpretation import inventory,messages,interpret
+    source=replace(visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot']),text='Inclusion Criteria:\n'+text)
+    passages=inventory(source);value=source_meaning(messages(source,passages))
+    nodes,evidence,records,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not errors and nodes[0]['threshold']==number and nodes[0]['unit']==unit
+    assert records[0]['field_origin']['threshold']=='literal_source_rule'
+    for name,span in evidence[0]['fields'].items():
+        assert source.text[span['start']:span['end']]==nodes[0][name]
+
+
+def test_source_only_atomic_answer_is_not_complete_clinical_interpretation(prepared,monkeypatch):
+    async def provider(messages,key,disconnected):return json.dumps(source_meaning(messages))
+    monkeypatch.setattr(visitor,'provider',provider)
+    result=client.post('/visitor-analysis/run',json=approval(quote(prepared[0]))).json()
+    assert result['full_source_coverage_validated'] and not result['interpretation_complete']
+    assert result['status']=='review_required' and all(r['unresolved_reason']=='no_structured_fields' for r in result['source_passages'])
+
+
+def test_malformed_response_diagnostics_report_schema_failure_without_raw_content():
+    from backend.app.source_interpretation import diagnostic_counts
+    stats=diagnostic_counts('{"interpretations":[ private-data',[],[],[],[{'code':'invalid_json_or_schema'}])
+    assert stats['schema_validation_failures']==1 and stats['fields_accepted']==0
+    assert not stats['counts_available']
+    assert 'private-data' not in json.dumps(stats)
+
+
+
+def test_legacy_response_diagnostics_count_actual_fields_instead_of_reporting_zero():
+    from backend.app.source_interpretation import diagnostic_counts
+    node=dict.fromkeys(['cohort','biomarker','assay','comparator','threshold','unit','temporal_constraint','dependencies'])
+    node.update(criterion_id='legacy',threshold='18',unit='years')
+    stats=diagnostic_counts(json.dumps({'criteria':[node]}),[],[node],[],[])
+    assert stats['counts_available'] and stats['response_contract']=='legacy_criteria'
+    assert stats['model_fields_received']==2 and stats['model_fields_accepted']==2
+    assert stats['fields_rejected']==0 and stats['fields_missing']==0
+
+
+def test_debug_counts_are_available_for_authenticated_legacy_requests(prepared,monkeypatch):
+    monkeypatch.setenv('TRIALLENS_EXTRACTION_DEBUG','1')
+    monkeypatch.setenv('TRIALLENS_OPERATOR_TOKEN','non-secret-debug-operator-0123456789')
+    async def provider(messages,key,disconnected):return content(messages)
+    monkeypatch.setattr(visitor,'provider',provider)
+    response=client.post('/visitor-analysis/run',json=approval(quote(prepared[0])),headers={'X-TrialLens-Debug':'1','Authorization':'Bearer non-secret-debug-operator-0123456789'})
+    assert response.status_code==200
+    stats=response.json()['debug_diagnostics']['sections']
+    assert len(stats)==2 and all(row['response_contract']=='legacy_criteria' for row in stats)
+    assert sum(row['fields_null'] for row in stats)==14

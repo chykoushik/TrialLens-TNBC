@@ -1092,5 +1092,5 @@ footer { border-top: 1px solid var(--line); padding-top: 21px; margin: 30px 0 0;
 .paper-planner .recommended-report { border: 2px solid #47775d; box-shadow: 0 0 0 2px #47775d22; }
 
 .paper-planner .review-recommendation { padding: 20px; margin: 20px 0; border-radius: 12px; }
-.paper-planner .manual-exploration { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.paper-planner .manual-exploration input { flex: 0 0 auto; }
+.paper-planner .manual-exploration { display: flex; flex-direction: row; justify-content: flex-start; align-items: center; gap: 10px; font-size: 14px; }
+.paper-planner .manual-exploration input { flex: 0 0 auto; width: auto; margin: 0; }

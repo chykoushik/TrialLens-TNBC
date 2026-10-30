@@ -38,7 +38,7 @@ test('initial view explains the synthetic demo and highlights only backend recom
   expect(screen.getByRole('heading', { name: 'Recommended next: Report 6' })).toBeVisible()
   expect(screen.getAllByRole('heading', { level: 4 })[0]).toHaveTextContent('Report 6 - Recommended')
   expect(screen.getByText(/Checks synthetic condition 6/)).toBeVisible()
-  expect(screen.getByLabelText('Outcome for report 1')).toBeDisabled()
+  expect(screen.queryByLabelText('Outcome for report 1')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Outcome for report 4')).not.toBeInTheDocument()
   expect(screen.getByText('Report 4: Not enough review budget.')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Restart Review' })).toBeEnabled()
@@ -102,17 +102,16 @@ test('zero budget never presents reports for selection', async () => {
   expect(screen.queryByLabelText(/Outcome for report/)).not.toBeInTheDocument()
 })
 
-test('research diagnostics remain accessible but collapsed by default', async () => {
+test('public research details are readable and never render implementation diagnostics', async () => {
   await ready()
   const summary = screen.getByText('Research Details')
   expect(summary.closest('details')).not.toHaveAttribute('open')
-  expect(screen.getByText(/BDD nodes: 10/)).not.toBeVisible()
-  expect(screen.getByText(/Boolean expressions from the frozen scenario/)).not.toBeVisible()
-  expect(screen.getByText(/Sources: research/)).not.toBeVisible()
   fireEvent.click(summary)
-  expect(screen.getByText(/BDD nodes: 10/)).toBeVisible()
-  expect(screen.getByText(/Policy weight is how often/)).toBeVisible()
-  expect(screen.getByText(/not guarantees conditional/)).toBeVisible()
+  expect(screen.getByText(/It may leave some questions unanswered/)).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Read the public methods and limitations' })).toBeVisible()
+  expect(screen.getByRole('link', { name: /Frozen machine-readable scenarios/ })).toBeVisible()
+  expect(document.querySelector('pre')).toBeNull()
+  expect(document.body.textContent).not.toMatch(/BDD|Cached diagram|Numerical optimization gap|research\/.*\.py|policy_decisions|\[\s*"AND"/)
 })
 
 

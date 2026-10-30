@@ -179,10 +179,23 @@ test('source coverage and supported numeric fields are distinct from unresolved 
   expect(screen.getByText(/Structured clinical fields: 3 source-supported values/)).toBeVisible()
   expect(screen.getByText('18')).toBeVisible()
   expect(screen.getByText('years')).toBeVisible()
-  expect(screen.getAllByText('Not extracted or not applicable')).toHaveLength(4)
+  expect(screen.getByText(/Unfilled fields may be inapplicable or not extracted/)).toBeVisible()
   expect(screen.getByText(/It does not establish complete clinical interpretation/)).toBeVisible()
   fireEvent.click(screen.getByText('Original passages and interpretation coverage (1)'))
-  expect(screen.getByText('threshold: retained')).toBeVisible()
-  expect(screen.getByText('biomarker: not extracted or not applicable')).toBeVisible()
+  expect(screen.queryByRole('list', { name: 'Clinical field handling' })).not.toBeInTheDocument()
   expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+
+test('literal source facts are identified without claiming they were supplied by the model', async () => {
+  const result = {status:'review_required',literal_source_rules_used:true,source_inventory_complete:true,
+    interpretation_complete:false,full_source_coverage_validated:true,source_passages:[],sections:[]}
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result))))
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button',{name:'Run NVIDIA Analysis'}))
+  fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'),{target:{value:'non-secret-literal-fixture'}})
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button',{name:'Approve cost and analyze'}))
+  expect(await screen.findByText(/not supplied by the model/)).toBeVisible()
+  expect(screen.getByText(/Clinical interpretation: incomplete or unresolved/)).toBeVisible()
 })

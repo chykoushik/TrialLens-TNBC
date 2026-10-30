@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from backend.app.extraction_prompt import CLINICAL_FIELDS, SPAN_FIELDS
 from backend.app.extraction_validation import validate_extraction, unique_object, reject_nonfinite
 
-PROMPT_VERSION = "source-interpretation-v2"
+PROMPT_VERSION = "source-interpretation-v3"
 HEADINGS = re.compile(r"^[ \t]*(?:#+[ \t]*)?(Inclusion|Exclusion)(?:[ \t]+Criteria)?[ \t]*:?[ \t]*$", re.M | re.I)
 BULLET = re.compile(r"^([ \t]*)(?:[-*+\u2022]|\d+[.)])\s+")
 
@@ -114,6 +114,100 @@ def unique_quote(text, quotation, start, end):
     return matches[0]
 
 
+def literal_fields(passage):
+    """Literal age/life-expectancy lower bounds only; ambiguous context abstains."""
+    text = passage["text"]
+    if passage["boundary_ambiguous"] or passage["scope_ambiguous"] or re.search(r"\b(no|not|without|absence|excluding|ineligible|waived|except|unless|if|either|between|under|maximum|less|at most)\b", text, re.I):
+        return {}
+    number = r"(?P<threshold>\d+(?:\.\d+)?)"
+    bound = r"(?P<comparator>\u2265|>=|at least\b)"
+    patterns = [
+        rf"\b(?:age|aged)\s+{bound}\s*{number}\s+(?P<unit>years?)\b",
+        rf"\baged\s+{number}\s+(?P<unit>years?)\s+(?P<comparator>or greater)\b",
+        rf"\blife expectancy\s+(?:of\s+)?{bound}\s*(?:at\s+)?{number}\s+(?P<unit>months?)\b",
+    ]
+    matches = [match for pattern in patterns for match in re.finditer(pattern, text, re.I)]
+    if len(matches) != 1:
+        return {}
+    values = matches[0].groupdict()
+    try:
+        for value in values.values():
+            unique_quote(text, value, 0, len(text))
+    except ValueError:
+        return {}
+    return values
+
+
+def structured_fields(nodes):
+    return sum(sum(node.get(name) is not None for name in SPAN_FIELDS) + structured_fields(node.get("dependencies") or []) for node in nodes)
+
+
+def diagnostic_counts(content, passages, criteria, records, errors):
+    counts = dict(model_fields_received=0, fields_matched_to_passages=0, model_fields_accepted=0,
+                  fields_rejected=0, fields_withheld=0, fields_missing=0, fields_null=0,
+                  deterministic_fields_accepted=0, evidence_matching_failures=0,
+                  schema_validation_failures=0, unsupported_logical_dependencies=0)
+    counts["counts_available"] = False
+    counts["response_contract"] = "unknown"
+    known = {p["source_id"]: p for p in passages}
+    accepted = {}
+    def visit(nodes):
+        for node in nodes:
+            accepted[node["criterion_id"]] = node
+            visit(node.get("dependencies") or [])
+    visit(criteria)
+    try:
+        payload = json.loads(content, object_pairs_hook=unique_object, parse_constant=reject_nonfinite)
+        legacy = isinstance(payload, dict) and "criteria" in payload and "interpretations" not in payload
+        key = "criteria" if legacy else "interpretations"
+        items = payload.get(key, []) if isinstance(payload, dict) else []
+        counts["counts_available"] = isinstance(payload, dict) and key in payload and isinstance(items, list)
+        counts["response_contract"] = "legacy_criteria" if legacy else "source_interpretations" if counts["counts_available"] else "unknown"
+        ids = [item.get("source_id") for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+        def fields(item, identifier, passage):
+            for name in SPAN_FIELDS:
+                if name not in item:
+                    counts["fields_missing"] += 1
+                elif item[name] is None:
+                    counts["fields_null"] += 1
+                else:
+                    counts["model_fields_received"] += 1
+                    if passage is not None:
+                        counts["fields_matched_to_passages"] += 1
+                    if passage is not None and identifier in accepted and accepted[identifier].get(name) == item[name]:
+                        counts["model_fields_accepted"] += 1
+                    elif passage and (passage["boundary_ambiguous"] or passage["scope_ambiguous"]):
+                        counts["fields_withheld"] += 1
+                    else:
+                        counts["fields_rejected"] += 1
+            children = item.get("dependencies")
+            if isinstance(children, list):
+                for i, child in enumerate(children):
+                    if isinstance(child, dict):
+                        child_id = child.get("criterion_id") if legacy else f"{identifier}/{i}"
+                        fields(child, child_id if isinstance(child_id, str) else None, passage)
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    identifier = item.get("criterion_id" if legacy else "source_id")
+                    if legacy:
+                        passage = {"scope_ambiguous": False, "boundary_ambiguous": False} if isinstance(identifier, str) and identifier in accepted else None
+                    else:
+                        passage = known.get(identifier) if isinstance(identifier, str) and ids.count(identifier) == 1 else None
+                    fields(item, identifier if isinstance(identifier, str) else None, passage)
+        if not legacy:
+            counts["fields_missing"] += len(SPAN_FIELDS) * sum(identifier not in ids for identifier in known)
+        for record in records:
+            counts["deterministic_fields_accepted"] += sum(origin == "literal_source_rule" and record.get("field_status", {}).get(name) == "retained" for name, origin in record.get("field_origin", {}).items())
+    except (ValueError, TypeError, RecursionError):
+        pass
+    counts["evidence_matching_failures"] = sum(e.get("code") in {"ambiguous_interpretation_evidence", "unsupported_field", "partial_numeric_threshold", "partial_comparator"} for e in errors)
+    counts["schema_validation_failures"] = sum(e.get("code") in {"schema_error", "invalid_json_or_schema"} for e in errors)
+    counts["unsupported_logical_dependencies"] = sum(r.get("unresolved_reason") == "logic_requires_review" for r in records)
+    counts["fields_accepted"] = counts["model_fields_accepted"] + counts["deterministic_fields_accepted"]
+    return counts
+
+
 def unresolved_logic(node):
     return node["logical_operator"] is None or any(unresolved_logic(child) for child in node["dependencies"] or [])
 
@@ -151,6 +245,12 @@ def interpret(content, source, passages, timestamp):
             errors.append({"code": reason})
             continue
         meaning = next(item for item in response.interpretations if item.source_id == identifier)
+        row["field_origin"] = {name: "not_reported" if getattr(meaning, name) is None else "model" for name in SPAN_FIELDS}
+        values = literal_fields(passage)
+        additions = {name: value for name, value in values.items() if getattr(meaning, name) is None} if all(getattr(meaning, name) in (None, value) for name, value in values.items()) else {}
+        if additions:
+            meaning = meaning.model_copy(update=additions)
+            row["field_origin"].update({name: "literal_source_rule" for name in additions})
         heading = source.text[passage["heading_start"]:passage["heading_end"]]
         local = replace(source, text=heading + "\n" + passage["text"])
         offset = len(heading) + 1
@@ -187,7 +287,13 @@ def interpret(content, source, passages, timestamp):
                 if value.dependencies:
                     children = []
                     for i, child in enumerate(value.dependencies):
-                        first = unique_quote(local.text, child.quotation, start, end)
+                        try:
+                            first = unique_quote(local.text, child.quotation, start, end)
+                        except ValueError:
+                            field_errors.append({"code": "ambiguous_interpretation_evidence", "field": "dependencies"})
+                            node["logical_operator"] = None
+                            entries[:] = [entry for entry in entries if not entry["criterion_id"].startswith(node_id + "/")]
+                            return node
                         children.append(build(child, child.quotation, first, first + len(child.quotation), f"{node_id}/{i}",
                                               (node["cohort"], fields["cohort"]) if node["cohort"] else inherited))
                     node["dependencies"] = children
@@ -213,9 +319,9 @@ def interpret(content, source, passages, timestamp):
                 row.update(interpretation_status="unsupported", unresolved_reason="unsupported_interpretation")
                 continue
             row["field_status"] = {name: "retained" if status == "exact_match_pending_validation" else status for name, status in row["field_status"].items()}
-            unresolved = unresolved or unresolved_logic(node)
+            unresolved = unresolved or unresolved_logic(node) or structured_fields([node]) == 0
             row.update(interpretation_status="unresolved" if unresolved else "validated", unresolved_reason=
-                       "scope_requires_review" if passage["scope_ambiguous"] else "ambiguous_boundaries" if passage["boundary_ambiguous"] else "logic_requires_review" if unresolved else None)
+                       "scope_requires_review" if passage["scope_ambiguous"] else "ambiguous_boundaries" if passage["boundary_ambiguous"] else "no_structured_fields" if structured_fields([node]) == 0 else "logic_requires_review" if unresolved else None)
             if field_errors:
                 errors.extend(field_errors)
                 row.update(interpretation_status="unsupported", unresolved_reason="unsupported_field_evidence")

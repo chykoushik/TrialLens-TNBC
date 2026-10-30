@@ -277,6 +277,7 @@ def safe_diagnostics(errors):
 async def extract(plan, key, disconnected):
     results = []
     requests_sent = 0
+    debug_counts = []
     timestamp = datetime.now(timezone.utc).isoformat()
     inventory = source_interpretation.inventory(plan["source"])
     coverage = {p["source_id"]: dict(p, interpretation_status="not_requested", unresolved_reason="not_requested") for p in inventory}
@@ -285,6 +286,7 @@ async def extract(plan, key, disconnected):
             break
         errors = []
         offsets_reanchored = False
+        content = None
         try:
             requests_sent += 1
             content = await provider(unit["messages"], key, disconnected)
@@ -294,6 +296,8 @@ async def extract(plan, key, disconnected):
                 decoded = None
             if isinstance(decoded, dict) and "interpretations" in decoded:
                 criteria, source_evidence, records, errors = source_interpretation.interpret(content, plan["source"], unit["passages"], timestamp)
+                if plan.get("debug"):
+                    debug_counts.append(source_interpretation.diagnostic_counts(content, unit["passages"], criteria, records, errors))
                 for record in records:
                     coverage[record["source_id"]] = record
                 results.append({"section": index + 1, "status": "failed" if errors else "validated",
@@ -319,6 +323,8 @@ async def extract(plan, key, disconnected):
                 entry["polarity_span"] = {"start": unit["heading_start"], "end": unit["heading_end"]}
                 entry["criterion_id"] = f"section-{index + 1}:{entry['criterion_id']}"
             criteria = [n.model_dump(mode="json") for n in model.criteria]
+            if plan.get("debug"):
+                debug_counts.append(source_interpretation.diagnostic_counts(content, unit["passages"], criteria, [], []))
             def identify(nodes):
                 for node in nodes:
                     node["criterion_id"] = f"section-{index + 1}:{node['criterion_id']}"
@@ -328,7 +334,7 @@ async def extract(plan, key, disconnected):
                 if unit["source_start"] <= passage["start"] < passage["end"] <= unit["source_end"]:
                     def unresolved(nodes):
                         return any(node["logical_operator"] is None or unresolved(node["dependencies"] or []) for node in nodes)
-                    needs_review = passage["scope_ambiguous"] or passage["boundary_ambiguous"] or unresolved(criteria)
+                    needs_review = passage["scope_ambiguous"] or passage["boundary_ambiguous"] or unresolved(criteria) or source_interpretation.structured_fields(criteria) == 0
                     coverage[passage["source_id"]].update(interpretation_status="unresolved" if needs_review else "validated",
                         unresolved_reason="legacy_interpretation_requires_review" if needs_review else None)
             results.append({"section": index + 1, "status": "validated", "source_start": unit["source_start"],
@@ -342,6 +348,8 @@ async def extract(plan, key, disconnected):
                 errors = [{"code": "invalid_json_or_schema", "field": "$", "category": "malformed_json"}]
             elif error.code == "incomplete_response":
                 errors = [{"code": "incomplete_response", "category": "incomplete_response"}]
+            if plan.get("debug"):
+                debug_counts.append(source_interpretation.diagnostic_counts(content or "", unit["passages"], [], [], errors))
             results.append({"section": index + 1, "status": "failed", "error": error.code, "diagnostics": safe_diagnostics(errors), "criteria": []})
             break
     results.extend({"section": i + 1, "status": "not_requested", "criteria": []} for i in range(len(results), len(plan["units"])))
@@ -361,9 +369,10 @@ async def extract(plan, key, disconnected):
         complete = merged is not None and not errors
         merge_errors = safe_diagnostics(errors)
     unresolved_count = sum(row["interpretation_status"] == "unresolved" for row in coverage.values())
-    return {"status": "review_required" if complete and unresolved_count else "complete" if complete else "incomplete",
+    result = {"status": "review_required" if complete and unresolved_count else "complete" if complete else "incomplete",
             "source": {"nct_id": plan["source"].nct_id, "snapshot_sha256": plan["source"].sha256, "source_snapshot": plan["source"].source_snapshot},
-            "source_inventory_complete": True, "source_passages": list(coverage.values()),
+            "source_inventory_complete": True, "source_passages": [{k: v for k, v in row.items() if k not in {"field_status", "field_origin"}} for row in coverage.values()],
+            "literal_source_rules_used": any("literal_source_rule" in row.get("field_origin", {}).values() for row in coverage.values()),
             "interpretation_complete": complete and not unresolved_count, "unresolved_count": unresolved_count,
             "validation_diagnostics_version": DIAGNOSTICS_VERSION, "extraction_prompt_version": PROMPT_VERSION,
             "sections": results, "merge_diagnostics": merge_errors, "human_review_required": True, "executable_mapping": False,
@@ -371,11 +380,20 @@ async def extract(plan, key, disconnected):
             "full_source_coverage_validated": complete,
             "maximum_cost_usd": plan["quote"]["maximum_cost_usd"], "planned_requests": len(plan["units"]),
             "requests_sent": requests_sent}
+    if plan.get("debug"):
+        result["debug_diagnostics"] = {"sections": debug_counts, "reason_codes": sorted({d["code"] for section in results for d in section.get("diagnostics", [])} | {r["unresolved_reason"] for r in coverage.values() if r.get("unresolved_reason")})}
+    return result
 
 
 @router.post("/run")
 async def run(body: Approval, request: Request):
     owner = boundary(request)
+    debug = request.headers.get("x-triallens-debug") == "1"
+    if debug:
+        from backend.app.inference_access import require_operator
+        if os.environ.get("TRIALLENS_EXTRACTION_DEBUG") != "1":
+            raise HTTPException(403, "Extraction debugging is disabled.")
+        require_operator(request.headers.get("authorization"))
     deadline = time.monotonic() + KEY_TTL
     key = body.api_key.get_secret_value().strip()
     body.api_key = SecretStr("")
@@ -398,6 +416,7 @@ async def run(body: Approval, request: Request):
         source = select_source(plan["source"].nct_id, plan["snapshot"])
         if source.sha256 != plan["source"].sha256:
             raise HTTPException(409, "Source changed. Prepare a new analysis.")
+        plan["debug"] = debug
         plan["key_deadline"] = deadline
         task = asyncio.create_task(extract(plan, key, disconnected))
         def expire():
