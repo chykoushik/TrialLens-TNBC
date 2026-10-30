@@ -261,7 +261,7 @@ def safe_diagnostics(errors):
             continue
         item = {"code": code, "message": VALIDATION_REASONS[code]}
         field = error.get("field")
-        if code in ("schema_error", "invalid_json_or_schema") and isinstance(field, str):
+        if code in ("schema_error", "invalid_json_or_schema", "ambiguous_interpretation_evidence") and isinstance(field, str):
             parts = field.split(".")
             item["field"] = ".".join(part if part in allowed or (part.isascii() and part.isdigit()) else "[unexpected]" for part in parts)[:300]
         category = error.get("category")

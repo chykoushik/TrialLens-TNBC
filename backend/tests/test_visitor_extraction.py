@@ -77,7 +77,7 @@ def test_explicit_aggregate_approval_sections_replay_and_no_persistence(prepared
     assert client.post('/visitor-analysis/run', json=approval(value, confirmed=False)).status_code == 422
     assert client.post('/visitor-analysis/run', json=approval(value, maximum_cost_usd='100')).status_code == 409
     result = client.post('/visitor-analysis/run', json=approval(value))
-    assert result.status_code == 200 and result.json()['status'] == 'review_required'
+    assert result.status_code == 200 and result.json()['status'] == 'complete'
     assert len(calls) == 2 and not result.json()['executable_mapping']
     assert result.headers['cache-control'] == 'no-store'
     source_text = visitor.select_source(body['nct_id'], body['snapshot']).text
@@ -321,7 +321,7 @@ def test_two_visitors_cancel_independently(prepared, monkeypatch):
         with pytest.raises(HTTPException):
             await a
         result = await b
-        assert result['status'] == 'review_required'
+        assert result['status'] == 'complete'
     asyncio.run(scenario())
     assert requests.count(KEY) == 1
     assert requests.count('other-visitor-fixture') == 2
@@ -706,8 +706,10 @@ def test_source_first_exact_unicode_offsets_do_not_normalize_quotations(prepared
     passages = inventory(source)
     value = source_meaning(messages(source,passages))
     value['interpretations'][0].update(comparator='>=', threshold='18', unit='years')
-    nodes, _, _, errors = interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
-    assert not nodes and errors[0]['code'] == 'ambiguous_interpretation_evidence'
+    nodes, _, ledger, errors = interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert nodes[0]['comparator'] is None and nodes[0]['threshold'] == '18'
+    assert errors[0]['code'] == 'ambiguous_interpretation_evidence'
+    assert ledger[0]['interpretation_status'] == 'unsupported'
     value['interpretations'][0]['comparator']='\u2265'
     nodes, evidence, ledger, errors = interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
     assert not errors and ledger[0]['interpretation_status']=='validated'
@@ -758,3 +760,130 @@ def test_source_first_nested_unresolved_logic_never_claims_complete_interpretati
     assert root['dependencies'][1]['logical_operator'] is None
     assert root['dependencies'][1]['original_text'] == '(B OR C)'
     assert result['human_review_required'] and not result['executable_mapping']
+
+
+@pytest.mark.parametrize('text,fields', [
+    ('Age \u226518 years', {'comparator': '\u2265', 'threshold': '18', 'unit': 'years'}),
+    ('1. Age \u226518 years', {'comparator': '\u2265', 'threshold': '18', 'unit': 'years'}),
+    ('Life expectancy \u22653 months', {'comparator': '\u2265', 'threshold': '3', 'unit': 'months'}),
+    ('2. Life expectancy \u22653 months', {'comparator': '\u2265', 'threshold': '3', 'unit': 'months'}),
+    ('PD-L1 CPS \u226510', {'biomarker': 'PD-L1', 'assay': 'CPS', 'comparator': '\u2265', 'threshold': '10'}),
+    ('Cohort 1: HER2 IHC 3+', {'cohort': 'Cohort 1', 'biomarker': 'HER2', 'assay': 'IHC', 'threshold': '3+'}),
+])
+def test_supported_scalar_fields_survive_numbered_and_single_line_sources(prepared, text, fields):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']), text='Inclusion Criteria:\n'+text)
+    passages = inventory(source)
+    value = source_meaning(messages(source, passages))
+    value['interpretations'][0].update(fields)
+    nodes, evidence, ledger, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
+    assert not errors and not passages[0]['boundary_ambiguous']
+    assert {name: nodes[0][name] for name in fields} == fields
+    for name, val in fields.items():
+        span = evidence[0]['fields'][name]
+        assert source.text[span['start']:span['end']] == val
+        assert ledger[0]['field_status'][name] == 'retained'
+
+
+def test_saved_nct06774027_numeric_interpretations_reach_merged_results(monkeypatch):
+    source = visitor.select_source('NCT06774027')
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        value = source_meaning(messages)
+        for row, passage in zip(value['interpretations'], json.loads(messages[-1]['content'])['source_passages']):
+            if 'aged 18 years' in passage['text']:
+                row.update(threshold='18', unit='years', comparator='or greater')
+            elif 'life expectancy' in passage['text']:
+                row.update(threshold='3', unit='months', comparator='at least')
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    units = visitor.sections(source)
+    result = asyncio.run(visitor.extract({'source': source, 'units': units, 'quote': {'maximum_cost_usd': '0.1'}}, KEY, asyncio.Event()))
+    assert len(calls) == len(units) == 2
+    assert result['full_source_coverage_validated'] and result['status'] == 'review_required'
+    assert not result['interpretation_complete'] and not result['executable_mapping']
+    assert result['merged_criteria'][0]['threshold'] == '18'
+    assert result['merged_criteria'][0]['logical_operator'] is None
+    assert result['merged_criteria'][1]['threshold'] == '3'
+    assert result['merged_criteria'][1]['unit'] == 'months'
+    assert result['source_passages'][0]['field_status']['threshold'] == 'retained'
+
+
+def test_supported_field_survives_another_rejected_field_without_validating_the_section(prepared, monkeypatch):
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']), text='Inclusion Criteria:\n1. Age \u226518 years\nExclusion Criteria:\n1. Prior surgery')
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        value = source_meaning(messages)
+        value['interpretations'][0].update(threshold='18', unit='years', assay='invented-assay')
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    result = asyncio.run(visitor.extract({'source': source, 'units': visitor.sections(source), 'quote': {'maximum_cost_usd': '0.1'}}, KEY, asyncio.Event()))
+    assert result['status'] == 'incomplete' and not result['full_source_coverage_validated']
+    assert len(calls) == 1 and result['sections'][1]['status'] == 'not_requested'
+    node = result['sections'][0]['criteria'][0]
+    assert node['threshold'] == '18' and node['unit'] == 'years' and node['assay'] is None
+    assert result['source_passages'][0]['interpretation_status'] == 'unsupported'
+    assert result['source_passages'][0]['field_status']['assay'] == 'unsupported_evidence'
+    assert any(d.get('field') == 'assay' for d in result['sections'][0]['diagnostics'])
+
+
+@pytest.mark.parametrize('change,category', [({'threshold': 18}, 'incorrect_type'), ({'unit': ['years']}, 'incorrect_type'), ({'threshold': 'missing'}, 'missing_required_property')])
+def test_missing_and_malformed_clinical_fields_are_never_coerced(prepared, change, category):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']), text='Inclusion Criteria:\nAge \u226518 years')
+    passages = inventory(source); value = source_meaning(messages(source, passages))
+    if change.get('threshold') == 'missing':
+        del value['interpretations'][0]['threshold']
+    else:
+        value['interpretations'][0].update(change)
+    nodes, _, _, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
+    assert not nodes and any(e.get('category') == category for e in errors)
+
+
+def test_null_numeric_fields_are_not_invented_and_ambiguous_cohort_fields_are_explicitly_withheld(monkeypatch):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = visitor.select_source('NCT06774027'); passages = inventory(source)
+    value = source_meaning(messages(source, passages))
+    value['interpretations'][3].update(cohort='Cohort 1', biomarker='HR+', threshold='1')
+    nodes, _, ledger, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
+    assert not errors
+    assert nodes[0]['threshold'] is None
+    assert ledger[0]['field_status']['threshold'] == 'not_extracted_or_not_applicable'
+    cohort = next(n for n in nodes if 'Cohort 4:' in n['original_text'])
+    assert cohort['cohort'] is None and cohort['biomarker'] is None and cohort['threshold'] is None
+    assert ledger[3]['field_status']['threshold'] == 'withheld_ambiguous_scope_or_boundary'
+    assert ledger[3]['interpretation_status'] == 'unresolved'
+
+
+def test_nested_boolean_clinical_values_and_offsets_are_preserved(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']), text='Inclusion Criteria:\n1. Age \u226518 years AND (PD-L1 CPS \u226510 OR HER2 IHC 3+)')
+    passages = inventory(source); value = source_meaning(messages(source, passages))
+    def child(text, **fields):
+        node = dict.fromkeys(['cohort', 'biomarker', 'assay', 'comparator', 'threshold', 'unit', 'temporal_constraint', 'dependencies'])
+        node.update(quotation=text, logical_operator='NONE');node.update(fields);return node
+    age = child('Age \u226518 years', comparator='\u2265', threshold='18', unit='years')
+    marker = child('PD-L1 CPS \u226510', biomarker='PD-L1', assay='CPS', comparator='\u2265', threshold='10')
+    her2 = child('HER2 IHC 3+', biomarker='HER2', assay='IHC', threshold='3+')
+    group = child('(PD-L1 CPS \u226510 OR HER2 IHC 3+)', logical_operator='OR', dependencies=[marker, her2])
+    value['interpretations'][0].update(logical_operator='AND', dependencies=[age, group])
+    nodes, evidence, ledger, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
+    assert not errors and ledger[0]['interpretation_status'] == 'validated'
+    assert nodes[0]['dependencies'][0]['threshold'] == '18'
+    assert nodes[0]['dependencies'][1]['dependencies'][0]['threshold'] == '10'
+    assert nodes[0]['dependencies'][1]['dependencies'][1]['threshold'] == '3+'
+    assert len(evidence) == 5
+
+
+
+def test_exact_substring_that_fails_numeric_validation_is_not_reported_retained(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = replace(visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot']), text='Inclusion Criteria:\nAge \u226518.5 years')
+    passages = inventory(source); value = source_meaning(messages(source, passages))
+    value['interpretations'][0].update(threshold='18', unit='years')
+    nodes, _, ledger, errors = interpret(json.dumps(value), source, passages, '2026-10-30T00:00:00Z')
+    assert not nodes and any(error['code'] == 'partial_numeric_threshold' for error in errors)
+    assert ledger[0]['field_status']['threshold'] == 'not_retained_validation_failed'
+    assert 'retained' not in ledger[0]['field_status'].values()

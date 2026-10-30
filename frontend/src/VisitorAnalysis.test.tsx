@@ -157,3 +157,32 @@ test('source inventory stays visible when interpretations are missing or unresol
   expect(screen.getByText('Full source coverage: incomplete or unverified.')).toBeVisible()
   expect(fetcher).toHaveBeenCalledTimes(2)
 })
+
+
+test('source coverage and supported numeric fields are distinct from unresolved clinical interpretation', async () => {
+  const criterion = { criterion_id: 'age', original_text: 'Age >=18 years', criterion_type: 'inclusion', logical_operator: null,
+    threshold: '18', comparator: '>=', unit: 'years', biomarker: null, assay: null, cohort: null, temporal_constraint: null }
+  const result = { status: 'review_required', source_inventory_complete: true, full_source_coverage_validated: true,
+    interpretation_complete: false, source_passages: [{ source_id: 'age', start: 20, end: 33, text: 'Age >=18 years',
+      interpretation_status: 'unresolved', unresolved_reason: 'logic_requires_review',
+      field_status: { threshold: 'retained', biomarker: 'not_extracted_or_not_applicable' } }],
+    sections: [{ section: 1, status: 'validated', criteria: [criterion] }] }
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result)))
+  vi.stubGlobal('fetch', fetcher)
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Run NVIDIA Analysis' }))
+  fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'), { target: { value: 'non-secret-field-fixture' } })
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve cost and analyze' }))
+  expect(await screen.findByText('Full source coverage: validated.')).toBeVisible()
+  expect(screen.getByText(/Clinical interpretation: incomplete or unresolved/)).toBeVisible()
+  expect(screen.getByText(/Structured clinical fields: 3 source-supported values/)).toBeVisible()
+  expect(screen.getByText('18')).toBeVisible()
+  expect(screen.getByText('years')).toBeVisible()
+  expect(screen.getAllByText('Not extracted or not applicable')).toHaveLength(4)
+  expect(screen.getByText(/It does not establish complete clinical interpretation/)).toBeVisible()
+  fireEvent.click(screen.getByText('Original passages and interpretation coverage (1)'))
+  expect(screen.getByText('threshold: retained')).toBeVisible()
+  expect(screen.getByText('biomarker: not extracted or not applicable')).toBeVisible()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})
