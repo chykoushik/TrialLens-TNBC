@@ -93,3 +93,45 @@ for (const diagnostics of [undefined, []]) {
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 }
+
+
+
+test('schema errors show sanitized field and validation category without retrying', async () => {
+  const result = { status:'incomplete', sections:[{ section:1, status:'failed', error:'source_validation_failed', criteria:[],
+    diagnostics:[{ code:'schema_error', message:'The model response does not match the required criteria and evidence schema.', field:'criteria.0.threshold', category:'incorrect_type' },
+      { code:'schema_error', message:'The model response does not match the required criteria and evidence schema.', field:'evidence.0.original_span.end', category:'missing_required_property' }] },
+    { section:2, status:'not_requested', criteria:[] }] }
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result)))
+  vi.stubGlobal('fetch', fetcher)
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button', { name:'Run NVIDIA Analysis' }))
+  fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'), { target:{value:'non-secret-schema-fixture'} })
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name:'Approve cost and analyze' }))
+  expect(await screen.findByText(/Field: criteria.0.threshold./)).toHaveTextContent('Reason: incorrect type.')
+  expect(screen.getByText(/Field: evidence.0.original_span.end./)).toHaveTextContent('Reason: missing required property.')
+  expect(screen.getByText('Section 2: not requested')).toBeVisible()
+  expect(screen.queryByDisplayValue('non-secret-schema-fixture')).not.toBeInTheDocument()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+
+
+test.each([
+  [422, 'Long cohort-scoped criteria require source review before splitting.', 'Long cohort-scoped criteria require source review before splitting.'],
+  [429, 'Visitor preparation limit reached. Please wait ten minutes.', 'Visitor preparation limit reached. Please wait ten minutes.'],
+  [503, 'Operator must configure verified provider pricing before visitor extraction.', 'Operator must configure verified provider pricing before visitor extraction.'],
+  [403, 'Untrusted request origin.', 'Untrusted request origin.'],
+  [404, 'non-secret-private-server-detail', 'The preparation endpoint was not found.'],
+  [500, 'non-secret-private-server-detail', 'The analysis service could not prepare this request.'],
+])('failed preparation %s shows a safe reason and never opens the key form', async (status, detail, expected) => {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail }), { status }))
+  vi.stubGlobal('fetch', fetcher)
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button', { name:'Run NVIDIA Analysis' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(`HTTP ${status}`)
+  expect(screen.getByRole('alert')).toHaveTextContent(expected)
+  expect(screen.getByRole('alert')).not.toHaveTextContent('non-secret-private-server-detail')
+  expect(screen.queryByLabelText('Connect Nebius API Key')).not.toBeInTheDocument()
+  expect(fetcher).toHaveBeenCalledTimes(1)
+})

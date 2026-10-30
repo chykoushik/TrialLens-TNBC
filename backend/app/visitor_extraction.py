@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from backend.app.extraction_prompt import CLINICAL_FIELDS, PROMPT_VERSION, build_messages
-from backend.app.extraction_validation import validate_extraction, reanchor_exact_spans
+from backend.app.extraction_validation import validate_extraction, reanchor_exact_spans, reject_nonfinite
 from backend.app.nebius import BASE_URL, DEFAULT_MODEL, MAX_INPUT_TOKENS, NebiusConfig, NebiusError, pricing
 from backend.app.trial_extraction_api import select_source
 import httpx
@@ -26,10 +26,11 @@ plans = {}
 attempts = {}
 active = set()
 running = {}
-DIAGNOSTICS_VERSION = 1
+DIAGNOSTICS_VERSION = 2
 KEY_TTL = 300
 OUTPUT_LIMIT = 8192
 MAX_SECTIONS = 24
+SECTION_BYTES = 2200
 TTL = 600
 
 
@@ -77,16 +78,16 @@ def sections(source):
     for i, heading in enumerate(headings):
         end = headings[i + 1].start() if i + 1 < len(headings) else len(source.text)
         body = source.text[heading.end():end]
-        if len(body.encode()) > 4500 and re.search(r"^[ \t]*(?:[*-] )?(?:For )?(?:cohort|arm|group|part)\b", body, re.M | re.I):
+        if len(body.encode()) > SECTION_BYTES and re.search(r"^[ \t]*(?:[*-] )?(?:For )?(?:cohort|arm|group|part)\b", body, re.M | re.I):
             raise HTTPException(422, "Long cohort-scoped criteria require source review before splitting.")
         starts = [m.start() for m in re.finditer(r"^(?:\* |[-•] |\d+[.)] )", body, re.M)]
         cuts = [0] + [p for p in starts if p > 0] + [len(body)]
         blocks = [body[a:b] for a, b in zip(cuts, cuts[1:]) if body[a:b].strip()]
         grouped = []
         for block in blocks:
-            if len(block.encode()) > 4500:
+            if len(block.encode()) > SECTION_BYTES:
                 raise HTTPException(422, "A dependent criterion is too long for safe automatic splitting. Source review required.")
-            if grouped and len((grouped[-1] + block).encode()) <= 4500:
+            if grouped and len((grouped[-1] + block).encode()) <= SECTION_BYTES:
                 grouped[-1] += block
             else:
                 grouped.append(block)
@@ -174,7 +175,7 @@ async def provider(messages, key, disconnected):
     from backend.app.nebius import build_chat_payload, error_code
     config = NebiusConfig(key, DEFAULT_MODEL, BASE_URL)
     payload = build_chat_payload(messages, model=config.model, max_tokens=OUTPUT_LIMIT, non_reasoning=True)
-    payload.update(store=False, n=1)
+    payload.update(store=False, n=1, response_format={"type": "json_object"})
     try:
         async with httpx.AsyncClient(timeout=120, follow_redirects=False, trust_env=False) as client:
             response = await client.post(f"{BASE_URL}/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=payload)
@@ -190,7 +191,7 @@ async def provider(messages, key, disconnected):
         if not isinstance(content, str) or not content.strip():
             raise NebiusError("invalid_response")
         try:
-            decoded = json.loads(content)
+            decoded = json.loads(content, parse_constant=reject_nonfinite)
         except (ValueError, RecursionError):
             raise NebiusError("invalid_structured_json") from None
         if key in content or key in json.dumps(decoded, ensure_ascii=False):
@@ -205,6 +206,7 @@ async def provider(messages, key, disconnected):
 
 
 VALIDATION_REASONS = {
+    "incomplete_response": "The provider did not finish normally; its response may be truncated or filtered.",
     "schema_error": "The model response does not match the required criteria and evidence schema.",
     "invalid_json_or_schema": "The model response is not valid, unique-key structured criteria JSON.",
     "unsupported_original_text": "A quotation does not match the exact source text and character offsets.",
@@ -231,8 +233,27 @@ VALIDATION_REASONS = {
 
 
 def safe_diagnostics(errors):
-    codes = dict.fromkeys(error.get("code") for error in errors)
-    return [{"code": code, "message": VALIDATION_REASONS[code]} for code in codes if code in VALIDATION_REASONS]
+    diagnostics = []
+    seen = set()
+    allowed = set(CLINICAL_FIELDS) | {"criteria", "evidence", "original_span", "polarity_span", "fields", "start", "end", "$", "[unexpected]"}
+    categories = {"missing_required_property", "unexpected_property", "incorrect_type", "invalid_enum_value", "invalid_value", "dependency_structure", "malformed_json", "duplicate_json_key", "duplicate_evidence_id", "invalid_structure", "incomplete_response"}
+    for error in errors:
+        code = error.get("code")
+        if code not in VALIDATION_REASONS:
+            continue
+        item = {"code": code, "message": VALIDATION_REASONS[code]}
+        field = error.get("field")
+        if code in ("schema_error", "invalid_json_or_schema") and isinstance(field, str):
+            parts = field.split(".")
+            item["field"] = ".".join(part if part in allowed or (part.isascii() and part.isdigit()) else "[unexpected]" for part in parts)[:300]
+        category = error.get("category")
+        if category in categories:
+            item["category"] = category
+        identity = (code, item.get("field"), item.get("category"))
+        if identity not in seen:
+            seen.add(identity)
+            diagnostics.append(item)
+    return diagnostics[:24]
 
 
 async def extract(plan, key, disconnected):
@@ -274,7 +295,9 @@ async def extract(plan, key, disconnected):
                             "criteria": criteria})
         except NebiusError as error:
             if error.code == "invalid_structured_json":
-                errors = [{"code": "invalid_json_or_schema"}]
+                errors = [{"code": "invalid_json_or_schema", "field": "$", "category": "malformed_json"}]
+            elif error.code == "incomplete_response":
+                errors = [{"code": "incomplete_response", "category": "incomplete_response"}]
             results.append({"section": index + 1, "status": "failed", "error": error.code, "diagnostics": safe_diagnostics(errors), "criteria": []})
             break
     results.extend({"section": i + 1, "status": "not_requested", "criteria": []} for i in range(len(results), len(plan["units"])))

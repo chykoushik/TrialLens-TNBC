@@ -168,7 +168,9 @@ def section_fixture(messages):
 def test_actual_nct04331067_all_sections_merge_and_partial_failure(monkeypatch, failure):
     source = select_source('NCT04331067')
     units = visitor.sections(source)
-    assert len(units) == 3
+    assert len(units) >= 3
+    expected_requests = len(units)
+    dependency_section = next(i for i, unit in enumerate(units) if any(node['dependencies'] for node in json.loads(section_fixture(unit['messages']))['criteria']))
     calls = []
     async def provider(messages, key, disconnected):
         section = len(calls)
@@ -178,22 +180,22 @@ def test_actual_nct04331067_all_sections_merge_and_partial_failure(monkeypatch, 
         value = json.loads(section_fixture(messages))
         if failure == 'omission' and section == 0:
             value['criteria'].pop()
-        if failure == 'dependency' and section == 0:
+        if failure == 'dependency' and section == dependency_section:
             dependency = next(node for node in value['criteria'] if node['dependencies'])['dependencies'][0]
             dependency['original_text'] = 'FABRICATED SOFTWARE FIXTURE'
         return json.dumps(value)
     monkeypatch.setattr(visitor, 'provider', provider)
     plan = {'source': source, 'units': units, 'quote': {'maximum_cost_usd': '0.1'}}
     result = asyncio.run(visitor.extract(plan, 'non-secret-fixture', asyncio.Event()))
-    assert len(result['sections']) == 3
+    assert len(result['sections']) == expected_requests
     if failure is not None:
         assert result['status'] == 'incomplete' and not result['full_source_coverage_validated']
         assert not result['merged_criteria']
-        failed = failure if type(failure) is int else 0
+        failed = failure if type(failure) is int else dependency_section if failure == 'dependency' else 0
         assert len(calls) == failed + 1
         assert all(section['status'] == 'validated' for section in result['sections'][:failed])
         return
-    assert result['status'] == 'complete' and len(calls) == 3
+    assert result['status'] == 'complete' and len(calls) == expected_requests
     assert result['full_source_coverage_validated'] and result['human_review_required'] and not result['executable_mapping']
     assert any(node['dependencies'] for node in result['merged_criteria'])
     identifiers = []
@@ -228,13 +230,13 @@ def test_public_search_prepare_approve_and_view_mocked_nvidia(monkeypatch):
     quote = client.post('/api/visitor-analysis/prepare', json=body)
     assert quote.status_code == 200
     value = quote.json()
-    assert value['request_count'] == 3
+    assert value['request_count'] == len(visitor.sections(select_source('NCT04331067')))
     result = client.post('/api/visitor-analysis/run', json={
         'analysis_id': value['analysis_id'], 'api_key': 'public-visitor-software-fixture',
         'confirmed': True, 'maximum_cost_usd': value['maximum_cost_usd']})
     assert result.status_code == 200
     assert result.json()['full_source_coverage_validated']
-    assert len(calls) == 3
+    assert len(calls) == value['request_count']
     assert result.headers['Cache-Control'] == 'no-store'
     assert 'public-visitor-software-fixture' not in result.text
 
@@ -260,7 +262,7 @@ def test_public_deployment_metadata_is_safe_and_explicit(monkeypatch, revision, 
         assert response.status_code == 200
         assert response.json()['build_revision'] == expected
         assert response.json()['extraction_prompt_version'] == visitor.PROMPT_VERSION
-        assert response.json()['validation_diagnostics_version'] == 1
+        assert response.json()['validation_diagnostics_version'] == visitor.DIAGNOSTICS_VERSION
         assert 'private-operational-value' not in response.text
 
 
@@ -319,7 +321,7 @@ def test_public_numbered_registry_failures_expose_diagnostic_contract(monkeypatc
         'confirmed':True, 'maximum_cost_usd':quote['maximum_cost_usd']})
     assert response.status_code == 200
     result = response.json()
-    assert result['validation_diagnostics_version'] == 1
+    assert result['validation_diagnostics_version'] == visitor.DIAGNOSTICS_VERSION
     assert result['extraction_prompt_version'] == visitor.PROMPT_VERSION
     assert result['merge_diagnostics'] == []
     assert 'non-secret-contract-fixture' not in response.text
@@ -329,7 +331,7 @@ def test_public_numbered_registry_failures_expose_diagnostic_contract(monkeypatc
         section = result['sections'][0]
         assert section['error'] == 'source_validation_failed'
         assert expected in {item['code'] for item in section['diagnostics']}
-        assert all(set(item) == {'code','message'} for item in section['diagnostics'])
+        assert all({'code','message'} <= set(item) <= {'code','message','field','category'} for item in section['diagnostics'])
     else:
         assert result['status'] == 'complete' and len(calls) == 2
         assert result['full_source_coverage_validated']
@@ -365,3 +367,18 @@ def test_manual_counterfactual_reports_are_not_confused_with_policy_actions():
     repeat = evaluate(Request(scenario=case['id'], budget=1))
     assert repeat['expected_policy_metrics'] == before['expected_policy_metrics']
     assert repeat['reports'] == before['reports']
+
+
+
+def test_public_preparation_missing_prerequisites_never_accepts_credentials(monkeypatch):
+    visitor.plans.clear(); visitor.attempts.clear()
+    monkeypatch.setenv('TRIALLENS_BYOK_ENABLED', '1')
+    monkeypatch.delenv('NEBIUS_INPUT_USD_PER_MILLION', raising=False)
+    async def forbidden(*args):
+        pytest.fail('Preparation must not invoke inference')
+    monkeypatch.setattr(visitor, 'provider', forbidden)
+    trial = client.get('/api/clinical-trials/search', params={'nct_id':'NCT06774027'}).json()['trials'][0]
+    response = client.post('/api/visitor-analysis/prepare', json={k:trial[k] for k in ['nct_id','snapshot','snapshot_sha256']})
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Operator must configure verified provider pricing before visitor extraction.'
+    assert not visitor.plans

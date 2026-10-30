@@ -364,7 +364,7 @@ def test_nct06774027_exact_quotes_with_wrong_offsets_are_reanchored(monkeypatch)
 
 @pytest.mark.parametrize('failure,expected', [
     ('quotation', 'unsupported_original_text'), ('numbering', 'partial_top_level_line'),
-    ('schema', 'invalid_json_or_schema'), ('logic', 'unresolved_compound_logic'),
+    ('schema', 'schema_error'), ('logic', 'unresolved_compound_logic'),
     ('field', 'unsupported_field'), ('duplicate', 'invalid_json_or_schema'),
 ])
 def test_validation_diagnostics_reject_unsupported_output_and_stop(prepared, monkeypatch, failure, expected):
@@ -482,4 +482,107 @@ def test_validation_failure_retains_previous_section_and_merge_reason(prepared, 
     result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
     assert result['status'] == 'incomplete' and all(s['status'] == 'validated' for s in result['sections'])
     assert result['merge_diagnostics'] == [{'code': 'lost_cohort_scope', 'message': visitor.VALIDATION_REASONS['lost_cohort_scope']}]
+    assert KEY not in json.dumps(result)
+
+
+
+@pytest.mark.parametrize('failure,field,category', [
+    ('missing_null', 'criteria.0.cohort', 'missing_required_property'),
+    ('numeric_threshold', 'criteria.0.threshold', 'incorrect_type'),
+    ('upper_polarity', 'criteria.0.criterion_type', 'invalid_enum_value'),
+    ('dependencies_string', 'criteria.0.dependencies', 'incorrect_type'),
+    ('nested_missing', 'criteria.0.dependencies.0.threshold', 'missing_required_property'),
+    ('and_without_operands', 'criteria.0.dependencies', 'dependency_structure'),
+    ('fields_list', 'evidence.0.fields', 'incorrect_type'),
+    ('missing_span', 'evidence.0.original_span.end', 'missing_required_property'),
+    ('string_offset', 'evidence.0.original_span.start', 'incorrect_type'),
+    ('unexpected_private_key', 'evidence.0.[unexpected]', 'unexpected_property'),
+    ('malformed_json', '$', 'malformed_json'),
+    ('nonfinite_json', '$', 'malformed_json'),
+])
+def test_nct06774027_schema_failure_paths_are_precise_and_secret_safe(monkeypatch, failure, field, category):
+    source = visitor.select_source('NCT06774027')
+    units = visitor.sections(source)
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        value = json.loads(content(messages))
+        node, entry = value['criteria'][0], value['evidence'][0]
+        node['logical_operator'] = None
+        if failure == 'missing_null': del node['cohort']
+        elif failure == 'numeric_threshold': node['threshold'] = 18
+        elif failure == 'upper_polarity': node['criterion_type'] = 'INCLUSION'
+        elif failure == 'dependencies_string': node['dependencies'] = 'none'
+        elif failure == 'nested_missing':
+            child = dict(node); child['criterion_id'] = 'child'; del child['threshold']
+            node.update(logical_operator='AND', dependencies=[child, dict(node, criterion_id='other-child')])
+        elif failure == 'and_without_operands': node['logical_operator'] = 'AND'
+        elif failure == 'fields_list': entry['fields'] = []
+        elif failure == 'missing_span': del entry['original_span']['end']
+        elif failure == 'string_offset': entry['original_span']['start'] = str(entry['original_span']['start'])
+        elif failure == 'unexpected_private_key': entry[KEY] = KEY
+        elif failure == 'malformed_json': return '{"criteria": ['
+        elif failure == 'nonfinite_json': return '{"criteria":NaN,"evidence":[]}'
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    plan = {'source':source, 'units':units, 'quote':{'maximum_cost_usd':'0.1'}}
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert len(calls) == 1 and result['status'] == 'incomplete'
+    assert result['sections'][1]['status'] == 'not_requested'
+    assert any(item.get('field') == field and item.get('category') == category for item in result['sections'][0]['diagnostics'])
+    assert KEY not in json.dumps(result)
+
+
+def test_prompt_publishes_actual_required_wire_schema_and_keeps_small_sections():
+    from backend.app.extraction_validation import ExtractionResponse, ExtractedCriterion
+    schema = ExtractionResponse.model_json_schema()
+    criterion = schema['$defs']['ExtractedCriterion']
+    assert set(criterion['required']) == set(CLINICAL_FIELDS)
+    assert criterion['additionalProperties'] is False
+    assert criterion['properties']['dependencies']['anyOf'][0]['items']['$ref'].endswith('/ExtractedCriterion')
+    for nct_id in ['NCT06774027', 'NCT04331067']:
+        units = visitor.sections(visitor.select_source(nct_id))
+        for unit in units:
+            assert len(unit['source'].text.encode()) <= visitor.SECTION_BYTES + len('Exclusion Criteria:\n')
+            instruction = unit['messages'][0]['content']
+            assert 'Required JSON schema:' in instruction
+            assert json.loads(instruction.split('Required JSON schema: ',1)[1]) == schema
+    assert set(ExtractedCriterion.model_fields) == set(CLINICAL_FIELDS)
+
+
+def test_provider_json_mode_and_truncation_are_not_schema_or_quote_success(prepared, monkeypatch):
+    calls = []
+    async def post(self, url, **kwargs):
+        calls.append(1)
+        assert kwargs['json']['response_format'] == {'type':'json_object'}
+        assert kwargs['json']['max_tokens'] == visitor.OUTPUT_LIMIT
+        return httpx.Response(200, json={'model':visitor.DEFAULT_MODEL,'choices':[{'finish_reason':'length','message':{'content':'{"criteria": ['}}]})
+    monkeypatch.setattr(httpx.AsyncClient, 'post', post)
+    result = client.post('/visitor-analysis/run', json=approval(quote(prepared[0]))).json()
+    assert len(calls) == 1 and result['status'] == 'incomplete'
+    section = result['sections'][0]
+    assert section['error'] == 'incomplete_response'
+    assert section['diagnostics'][0]['category'] == 'incomplete_response'
+    assert result['sections'][1]['status'] == 'not_requested'
+
+
+
+def test_later_schema_failure_retains_validated_sections_without_paid_retry(prepared, monkeypatch):
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    source = replace(source, text=source.text + '\nInclusion Criteria:\nthird fixture requirement')
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        value = json.loads(content(messages))
+        if len(calls) == 2:
+            value['criteria'][0]['threshold'] = 18
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    plan = {'source':source,'units':visitor.sections(source),'quote':{'maximum_cost_usd':'0.1'}}
+    result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
+    assert result['status'] == 'incomplete' and not result['full_source_coverage_validated']
+    assert len(calls) == 2
+    assert result['sections'][0]['status'] == 'validated' and result['sections'][0]['criteria']
+    assert result['sections'][1]['diagnostics'][0]['field'] == 'criteria.0.threshold'
+    assert result['sections'][2]['status'] == 'not_requested'
     assert KEY not in json.dumps(result)

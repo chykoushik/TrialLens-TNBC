@@ -91,9 +91,9 @@ def test_validated_synthetic_extraction(extraction_case):
     ("missing_evidence", "missing_evidence"),
     ("missing_criterion", "uncovered_source_text"),
     ("span", "unsupported_original_text"),
-    ("missing_field", "invalid_json_or_schema"),
-    ("missing_original", "invalid_json_or_schema"),
-    ("invented_metadata", "invalid_json_or_schema"),
+    ("missing_field", "schema_error"),
+    ("missing_original", "schema_error"),
+    ("invented_metadata", "schema_error"),
 ])
 def test_unsupported_or_incomplete_extraction(extraction_case, mutation, code):
     _, _, source, original = extraction_case

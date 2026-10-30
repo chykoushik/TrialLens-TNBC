@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -23,17 +23,45 @@ class CriterionEvidence(BaseModel):
     fields: dict[str, Span]
 
 
+class ExtractedCriterion(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    criterion_id: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    original_text: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    criterion_type: Literal["inclusion", "exclusion"]
+    cohort: str | None
+    logical_operator: Literal["AND", "OR", "NONE"] | None
+    dependencies: list["ExtractedCriterion"] | None
+    biomarker: str | None
+    assay: str | None
+    comparator: str | None
+    threshold: str | None
+    unit: str | None
+    temporal_constraint: str | None
+
+
 class ExtractionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    criteria: list[dict]
+    criteria: list[ExtractedCriterion]
     evidence: list[CriterionEvidence]
+
+
+class NonFiniteJSON(ValueError):
+    pass
+
+
+def reject_nonfinite(value):
+    raise NonFiniteJSON("Non-finite JSON constant")
+
+
+class DuplicateJSONKey(ValueError):
+    pass
 
 
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("Duplicate JSON key")
+            raise DuplicateJSONKey("Duplicate JSON key")
         result[key] = value
     return result
 
@@ -80,39 +108,61 @@ def validate_extraction(
 ) -> tuple[TrialCriteriaSet | None, list[dict]]:
     errors = []
 
-    def report(code, criterion_id=None, field=None):
-        errors.append({"code": code, "criterion_id": criterion_id, "field": field})
+    def report(code, criterion_id=None, field=None, category=None):
+        item = {"code": code, "criterion_id": criterion_id, "field": field}
+        if category:
+            item["category"] = category
+        errors.append(item)
+
+    def schema_errors(error, prefix=()):
+        allowed = set(CLINICAL_FIELDS) | {"criteria", "evidence", "original_span", "polarity_span", "fields", "start", "end"}
+        for item in error.errors(include_input=False, include_context=False, include_url=False):
+            location = (*prefix, *item["loc"])
+            field = ".".join(str(part) if isinstance(part, int) or part in allowed else "[unexpected]" for part in location) or "$"
+            kind = item["type"]
+            category = {"missing": "missing_required_property", "extra_forbidden": "unexpected_property", "literal_error": "invalid_enum_value"}.get(kind, "incorrect_type" if kind.endswith(("_type", "_parsing")) else "invalid_value")
+            if kind == "value_error" and item.get("msg") in (
+                "Value error, AND/OR requires at least two operands", "Value error, Dependencies require an AND/OR operator",
+                "Value error, Dependencies must preserve criterion polarity", "Value error, Dependencies must belong to the same trial"):
+                category = "dependency_structure"
+                field += ".dependencies"
+            report("schema_error", field=field, category=category)
 
     try:
-        payload = ExtractionResponse.model_validate(json.loads(content, object_pairs_hook=unique_object))
+        payload = ExtractionResponse.model_validate(json.loads(content, object_pairs_hook=unique_object, parse_constant=reject_nonfinite))
         if len({item.criterion_id for item in payload.evidence}) != len(payload.evidence):
-            raise ValueError("Duplicate evidence")
+            report("invalid_json_or_schema", field="evidence", category="duplicate_evidence_id")
+            return None, errors
 
-        def convert(node):
+        def convert(node, path):
             if not isinstance(node, dict) or set(node) != set(CLINICAL_FIELDS):
                 raise ValueError("Missing or unexpected criterion fields")
             data = dict(node)
             if data["dependencies"] is not None:
                 if not isinstance(data["dependencies"], list):
                     raise ValueError("Invalid dependencies")
-                data["dependencies"] = [convert(child) for child in data["dependencies"]]
-            return TrialCriterion.model_validate(dict(
-                data, nct_id=source.nct_id, source_url=source.source_url,
-                extraction_method=method, extraction_timestamp=timestamp,
-            ))
+                data["dependencies"] = [convert(child, (*path, "dependencies", index)) for index, child in enumerate(data["dependencies"])]
+            try:
+                return TrialCriterion.model_validate(dict(
+                    data, nct_id=source.nct_id, source_url=source.source_url,
+                    extraction_method=method, extraction_timestamp=timestamp,
+                ))
+            except ValidationError as error:
+                schema_errors(error, path)
+                raise ValueError("Invalid criterion structure") from None
 
         criteria_set = TrialCriteriaSet(
-            criteria=[convert(node) for node in payload.criteria],
+            criteria=[convert(node.model_dump(), ("criteria", index)) for index, node in enumerate(payload.criteria)],
             nct_id=source.nct_id, original_text=source.text, source_url=source.source_url,
             source_snapshot=source.source_snapshot, retrieval_timestamp=source.retrieval_timestamp,
             is_synthetic=source.is_synthetic,
         )
     except (ValueError, TypeError, RecursionError) as error:
         if isinstance(error, ValidationError):
-            for item in error.errors(include_input=False, include_context=False, include_url=False):
-                report("schema_error", field=".".join(str(part) for part in item["loc"]))
-        else:
-            report("invalid_json_or_schema")
+            schema_errors(error)
+        elif not errors:
+            category = "malformed_json" if isinstance(error, (json.JSONDecodeError, NonFiniteJSON)) else "duplicate_json_key" if isinstance(error, DuplicateJSONKey) else "invalid_structure"
+            report("invalid_json_or_schema", field="$", category=category)
         return None, errors
 
     evidence = {item.criterion_id: item for item in payload.evidence}
@@ -231,7 +281,7 @@ def validate_extraction(
 
 
 def reanchor_exact_spans(content: str, source: EligibilitySource) -> str:
-    payload = json.loads(content, object_pairs_hook=unique_object)
+    payload = json.loads(content, object_pairs_hook=unique_object, parse_constant=reject_nonfinite)
     parsed = ExtractionResponse.model_validate(payload)
     evidence = {entry["criterion_id"]: entry for entry in payload["evidence"]}
     if len(evidence) != len(parsed.evidence):
