@@ -14,7 +14,7 @@ beforeEach(() => {
 test('Home has three destinations, clear source boundaries and no duplicated workspace controls', async () => {
   render(<App />)
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getAllByRole('button').map(button => button.textContent)).toEqual(['Home', 'Evidence Review', 'Research Results'])
+  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getAllByRole('button').map(button => button.textContent)).toEqual(['Home', 'Evidence Review Demo', 'Research Results'])
   expect(screen.getByRole('button', { name: 'Search trials' })).toBeInTheDocument()
   expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Research Results' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Application mode')).not.toBeInTheDocument()
@@ -149,4 +149,16 @@ test('restoring a valid budget clears a failed calculation without losing confir
   fireEvent.change(screen.getByLabelText('Total review budget'), { target: { value: '3' } })
   await screen.findByLabelText('Fictional report outcome')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+
+test.each(['Real+Review', 'Evidence+Review+Demo'])('review URL %s opens the renamed public page', async hash => {
+  window.history.replaceState(null, '', `/#page=${hash}`)
+  render(<App />)
+  expect(await screen.findByRole('heading', { name: 'Evidence Review Demo', level: 1 })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Evidence review demonstration' })).toBeVisible()
+  expect(document.title).toBe('Evidence Review Demo | TrialLens-TNBC')
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Home' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Evidence Review Demo' }))
+  expect(window.location.hash).toBe('#page=Evidence+Review+Demo')
 })

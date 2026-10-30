@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 
-const pages = ['Home', 'Real Review', 'Research Results', 'Interactive Demo', 'Review Evidence', 'Research Lab', 'Trial Library']
+const pages = ['Home', 'Evidence Review Demo', 'Research Results', 'Interactive Demo', 'Review Evidence', 'Research Lab', 'Trial Library']
 export function readRoute() {
   const params = new URLSearchParams(window.location.hash.slice(1))
-  const requested = params.get('page') ?? 'Home'
+  const value = params.get('page') ?? 'Home'
+  const requested = value === 'Real Review' ? 'Evidence Review Demo' : value
   return { page: pages.includes(requested) ? requested : 'Home', trial: params.get('trial') ?? '', snapshot: params.get('snapshot') ?? '', view: params.get('view') ?? '' }
 }
 

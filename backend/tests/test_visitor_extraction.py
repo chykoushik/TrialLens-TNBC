@@ -77,7 +77,7 @@ def test_explicit_aggregate_approval_sections_replay_and_no_persistence(prepared
     assert client.post('/visitor-analysis/run', json=approval(value, confirmed=False)).status_code == 422
     assert client.post('/visitor-analysis/run', json=approval(value, maximum_cost_usd='100')).status_code == 409
     result = client.post('/visitor-analysis/run', json=approval(value))
-    assert result.status_code == 200 and result.json()['status'] == 'complete'
+    assert result.status_code == 200 and result.json()['status'] == 'review_required'
     assert len(calls) == 2 and not result.json()['executable_mapping']
     assert result.headers['cache-control'] == 'no-store'
     source_text = visitor.select_source(body['nct_id'], body['snapshot']).text
@@ -242,7 +242,7 @@ def test_unresolved_conditional_is_source_validated_but_never_executable(prepare
         return json.dumps(value)
     monkeypatch.setattr(visitor, 'provider', provider)
     result = client.post('/visitor-analysis/run', json=approval(quote(body))).json()
-    assert result['status'] == 'complete' and not result['executable_mapping'] and result['human_review_required']
+    assert result['status'] == 'review_required' and not result['interpretation_complete'] and not result['executable_mapping'] and result['human_review_required']
     assert result['sections'][0]['criteria'][0]['logical_operator'] is None
 
 
@@ -321,7 +321,7 @@ def test_two_visitors_cancel_independently(prepared, monkeypatch):
         with pytest.raises(HTTPException):
             await a
         result = await b
-        assert result['status'] == 'complete'
+        assert result['status'] == 'review_required'
     asyncio.run(scenario())
     assert requests.count(KEY) == 1
     assert requests.count('other-visitor-fixture') == 2
@@ -352,7 +352,7 @@ def test_nct06774027_exact_quotes_with_wrong_offsets_are_reanchored(monkeypatch)
     monkeypatch.setattr(visitor, 'provider', provider)
     plan = {'source': source, 'units': units, 'quote': {'maximum_cost_usd': '0.1'}}
     result = asyncio.run(visitor.extract(plan, KEY, asyncio.Event()))
-    assert len(calls) == 2 and result['status'] == 'complete'
+    assert len(calls) == 2 and result['status'] == 'review_required'
     assert all(section['exact_offsets_reanchored'] for section in result['sections'])
     for section in result['sections']:
         for node, evidence in zip(section['criteria'], section['source_evidence']):
@@ -545,8 +545,10 @@ def test_prompt_publishes_actual_required_wire_schema_and_keeps_small_sections()
         for unit in units:
             assert len(unit['source'].text.encode()) <= visitor.SECTION_BYTES + len('Exclusion Criteria:\n')
             instruction = unit['messages'][0]['content']
-            assert 'Required JSON schema:' in instruction
-            assert json.loads(instruction.split('Required JSON schema: ',1)[1]) == schema
+            assert 'Schema: ' in instruction
+            from backend.app.source_interpretation import Response
+            assert json.loads(instruction.split('Schema: ',1)[1]) == Response.model_json_schema()
+            assert 'source_passages' in json.loads(unit['messages'][-1]['content'])
     assert set(ExtractedCriterion.model_fields) == set(CLINICAL_FIELDS)
 
 
@@ -586,3 +588,173 @@ def test_later_schema_failure_retains_validated_sections_without_paid_retry(prep
     assert result['sections'][1]['diagnostics'][0]['field'] == 'criteria.0.threshold'
     assert result['sections'][2]['status'] == 'not_requested'
     assert KEY not in json.dumps(result)
+
+
+
+def source_meaning(messages, operator='NONE'):
+    data = json.loads(messages[-1]['content'])
+    values = []
+    for passage in data['source_passages']:
+        row = dict.fromkeys(['cohort','biomarker','assay','comparator','threshold','unit','temporal_constraint','dependencies'])
+        row.update(source_id=passage['source_id'], logical_operator=operator)
+        values.append(row)
+    return {'interpretations': values}
+
+
+def test_source_first_nct06774027_accounts_for_every_original_character(monkeypatch):
+    source = visitor.select_source('NCT06774027')
+    units = visitor.sections(source)
+    from backend.app.source_interpretation import inventory
+    originals = inventory(source)
+    assert len(originals) == 7
+    assert 'Cohort 4:' in originals[3]['text'] and originals[3]['scope_ambiguous']
+    calls = []
+    async def provider(messages, key, disconnected):
+        calls.append(1)
+        return json.dumps(source_meaning(messages))
+    monkeypatch.setattr(visitor, 'provider', provider)
+    result = asyncio.run(visitor.extract({'source':source,'units':units,'quote':{'maximum_cost_usd':'0.1'}},KEY,asyncio.Event()))
+    assert len(calls) == len(units)
+    assert result['status'] == 'review_required'
+    assert result['source_inventory_complete'] and result['full_source_coverage_validated']
+    assert not result['interpretation_complete'] and result['unresolved_count'] >= 3
+    assert len(result['source_passages']) == 7
+    for record in result['source_passages']:
+        assert source.text[record['start']:record['end']] == record['text']
+    cohort = next(node for section in result['sections'] for node in section['criteria'] if 'Cohort 4:' in node['original_text'])
+    assert cohort['logical_operator'] is None and cohort['cohort'] is None and cohort['dependencies'] is None
+    assert not result['executable_mapping']
+
+
+@pytest.mark.parametrize('failure', ['omitted', 'unknown_id', 'duplicate', 'changed_field', 'bad_dependency_quote', 'malformed'])
+def test_source_first_omissions_and_unsupported_claims_cannot_be_complete(monkeypatch, failure):
+    source = visitor.select_source('NCT06774027'); units = visitor.sections(source); calls=[]
+    async def provider(messages, key, disconnected):
+        calls.append(1); value=source_meaning(messages)
+        if failure=='omitted':value['interpretations'].pop(0)
+        elif failure=='unknown_id':value['interpretations'][0]['source_id']='invented-source'
+        elif failure=='duplicate':value['interpretations'].append(value['interpretations'][0])
+        elif failure=='changed_field':value['interpretations'][0]['threshold']='999 years'
+        elif failure=='bad_dependency_quote':
+            child=dict(value['interpretations'][0]);child.pop('source_id');child['quotation']='invented quotation'
+            value['interpretations'][0].update(logical_operator='AND', dependencies=[child,child])
+        elif failure=='malformed':return '{"interpretations": ['
+        return json.dumps(value)
+    monkeypatch.setattr(visitor,'provider',provider)
+    result=asyncio.run(visitor.extract({'source':source,'units':units,'quote':{'maximum_cost_usd':'0.1'}},KEY,asyncio.Event()))
+    assert result['status']=='incomplete' and not result['full_source_coverage_validated'] and not result['interpretation_complete']
+    assert result['source_inventory_complete'] and len(result['source_passages'])==7
+    assert len(calls)==1 and result['sections'][1]['status']=='not_requested'
+    assert all(source.text[p['start']:p['end']]==p['text'] for p in result['source_passages'])
+    if failure not in ('malformed',):assert result['sections'][0]['criteria']
+    assert KEY not in json.dumps(result)
+
+
+def test_source_first_later_invalid_section_preserves_prior_interpretations(prepared,monkeypatch):
+    source=visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot']);calls=[]
+    async def provider(messages,key,disconnected):
+        calls.append(1)
+        return json.dumps(source_meaning(messages)) if len(calls)==1 else '{"interpretations":null}'
+    monkeypatch.setattr(visitor,'provider',provider)
+    result=asyncio.run(visitor.extract({'source':source,'units':visitor.sections(source),'quote':{'maximum_cost_usd':'0.1'}},KEY,asyncio.Event()))
+    assert result['status']=='incomplete' and len(calls)==2
+    assert result['sections'][0]['status']=='validated' and result['sections'][0]['criteria']
+    assert result['sections'][1]['status']=='failed'
+
+
+def test_numbered_boolean_dependencies_validate_without_dropping_number_prefix(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source=visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot'])
+    source=replace(source,text='Inclusion Criteria:\n1. A AND (B OR C)')
+    passages=inventory(source); value=source_meaning(messages(source,passages))
+    def child(quote,operator='NONE',dependencies=None):
+        row=dict.fromkeys(['cohort','biomarker','assay','comparator','threshold','unit','temporal_constraint'])
+        row.update(quotation=quote,logical_operator=operator,dependencies=dependencies);return row
+    value['interpretations'][0].update(logical_operator='AND',dependencies=[child('A'),child('(B OR C)','OR',[child('B'),child('C')])])
+    nodes,evidence,ledger,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not errors and ledger[0]['interpretation_status']=='validated'
+    assert nodes[0]['original_text']=='1. A AND (B OR C)'
+    assert nodes[0]['dependencies'][1]['dependencies'][1]['original_text']=='C'
+    for item in evidence:
+        span=item['original_span'];assert source.text[span['start']:span['end']]
+
+
+def test_source_first_ambiguous_boundaries_remain_one_verbatim_unresolved_group(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source=visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot'])
+    source=replace(source,text='Inclusion Criteria:\nFor cohort A:\n  * marker present\n  * assay positive')
+    passages=inventory(source);assert len(passages)==1 and passages[0]['boundary_ambiguous']
+    value=source_meaning(messages(source,passages))
+    nodes,_,ledger,errors=interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not errors and ledger[0]['interpretation_status']=='unresolved'
+    assert nodes[0]['original_text']==source.text.split('\n',1)[1]
+    assert nodes[0]['logical_operator'] is None and nodes[0]['dependencies'] is None
+
+
+@pytest.mark.parametrize('quotation', ['A', 'partial quotation', ''])
+def test_source_first_evidence_never_guesses_repeated_or_incomplete_quotations(quotation):
+    from backend.app.source_interpretation import unique_quote
+    text = 'A AND A; partial quotations'
+    with pytest.raises(ValueError):
+        unique_quote(text, quotation, 0, len(text))
+
+
+def test_source_first_exact_unicode_offsets_do_not_normalize_quotations(prepared):
+    from backend.app.source_interpretation import inventory, messages, interpret
+    source = visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot'])
+    source = replace(source,text='Inclusion Criteria:\n1. Age \u226518 years')
+    passages = inventory(source)
+    value = source_meaning(messages(source,passages))
+    value['interpretations'][0].update(comparator='>=', threshold='18', unit='years')
+    nodes, _, _, errors = interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not nodes and errors[0]['code'] == 'ambiguous_interpretation_evidence'
+    value['interpretations'][0]['comparator']='\u2265'
+    nodes, evidence, ledger, errors = interpret(json.dumps(value),source,passages,'2026-10-30T00:00:00Z')
+    assert not errors and ledger[0]['interpretation_status']=='validated'
+    span=evidence[0]['fields']['comparator']
+    assert source.text[span['start']:span['end']]=='\u2265'
+
+
+
+def test_source_first_atomic_sections_merge_exactly_without_model_source_copy(prepared, monkeypatch):
+    source=visitor.select_source(prepared[0]['nct_id'],prepared[0]['snapshot'])
+    source=replace(source,text='Inclusion Criteria:\n1. Age \u226518 years\n\nExclusion Criteria:\n1. Prior surgery')
+    calls=[]
+    async def provider(messages,key,disconnected):
+        calls.append(1)
+        return json.dumps(source_meaning(messages))
+    monkeypatch.setattr(visitor,'provider',provider)
+    result=asyncio.run(visitor.extract({'source':source,'units':visitor.sections(source),'quote':{'maximum_cost_usd':'0.1'}},KEY,asyncio.Event()))
+    assert len(calls)==2 and result['status']=='complete'
+    assert result['interpretation_complete'] and result['full_source_coverage_validated']
+    assert result['human_review_required'] and not result['executable_mapping']
+    assert [n['original_text'] for n in result['merged_criteria']]==['1. Age \u226518 years','1. Prior surgery']
+    for section in result['sections']:
+        for node,entry in zip(section['criteria'],section['source_evidence']):
+            span=entry['original_span']
+            assert source.text[span['start']:span['end']]==node['original_text']
+
+
+
+def test_source_first_nested_unresolved_logic_never_claims_complete_interpretation(prepared, monkeypatch):
+    source = visitor.select_source(prepared[0]['nct_id'], prepared[0]['snapshot'])
+    source = replace(source, text='Inclusion Criteria:\n1. A AND (B OR C)')
+    def child(quotation, operator):
+        row = dict.fromkeys(['cohort', 'biomarker', 'assay', 'comparator', 'threshold', 'unit', 'temporal_constraint', 'dependencies'])
+        row.update(quotation=quotation, logical_operator=operator)
+        return row
+    async def provider(messages, key, disconnected):
+        value = source_meaning(messages)
+        value['interpretations'][0].update(logical_operator='AND', dependencies=[child('A', 'NONE'), child('(B OR C)', None)])
+        return json.dumps(value)
+    monkeypatch.setattr(visitor, 'provider', provider)
+    result = asyncio.run(visitor.extract({'source': source, 'units': visitor.sections(source), 'quote': {'maximum_cost_usd': '0.1'}}, KEY, asyncio.Event()))
+    assert result['status'] == 'review_required'
+    assert result['full_source_coverage_validated'] and not result['interpretation_complete']
+    assert result['unresolved_count'] == 1
+    assert result['source_passages'][0]['interpretation_status'] == 'unresolved'
+    root = result['merged_criteria'][0]
+    assert root['logical_operator'] == 'AND'
+    assert root['dependencies'][1]['logical_operator'] is None
+    assert root['dependencies'][1]['original_text'] == '(B OR C)'
+    assert result['human_review_required'] and not result['executable_mapping']

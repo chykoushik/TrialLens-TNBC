@@ -195,7 +195,7 @@ def test_actual_nct04331067_all_sections_merge_and_partial_failure(monkeypatch, 
         assert len(calls) == failed + 1
         assert all(section['status'] == 'validated' for section in result['sections'][:failed])
         return
-    assert result['status'] == 'complete' and len(calls) == expected_requests
+    assert result['status'] == 'review_required' and len(calls) == expected_requests
     assert result['full_source_coverage_validated'] and result['human_review_required'] and not result['executable_mapping']
     assert any(node['dependencies'] for node in result['merged_criteria'])
     identifiers = []
@@ -333,7 +333,7 @@ def test_public_numbered_registry_failures_expose_diagnostic_contract(monkeypatc
         assert expected in {item['code'] for item in section['diagnostics']}
         assert all({'code','message'} <= set(item) <= {'code','message','field','category'} for item in section['diagnostics'])
     else:
-        assert result['status'] == 'complete' and len(calls) == 2
+        assert result['status'] == 'review_required' and len(calls) == 2
         assert result['full_source_coverage_validated']
         assert len(result['merged_criteria']) == 7
         assert 'Cohort 4:' in result['merged_criteria'][3]['original_text']

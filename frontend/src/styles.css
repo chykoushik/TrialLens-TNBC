@@ -1090,3 +1090,7 @@ footer { border-top: 1px solid var(--line); padding-top: 21px; margin: 30px 0 0;
 @media(max-width:600px){.search-form{display:grid}.search-results article,.analysis-sections article{padding:16px}.planner-summary{display:grid;gap:8px}}
 
 .paper-planner .recommended-report { border: 2px solid #47775d; box-shadow: 0 0 0 2px #47775d22; }
+
+.paper-planner .review-recommendation { padding: 20px; margin: 20px 0; border-radius: 12px; }
+.paper-planner .manual-exploration { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.paper-planner .manual-exploration input { flex: 0 0 auto; }

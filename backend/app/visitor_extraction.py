@@ -14,7 +14,9 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from backend.app.extraction_prompt import CLINICAL_FIELDS, PROMPT_VERSION, build_messages
+from backend.app.extraction_prompt import CLINICAL_FIELDS, build_messages
+from backend.app import source_interpretation
+from backend.app.source_interpretation import PROMPT_VERSION
 from backend.app.extraction_validation import validate_extraction, reanchor_exact_spans, reject_nonfinite
 from backend.app.nebius import BASE_URL, DEFAULT_MODEL, MAX_INPUT_TOKENS, NebiusConfig, NebiusError, pricing
 from backend.app.trial_extraction_api import select_source
@@ -74,6 +76,10 @@ def sections(source):
     headings = list(re.finditer(r"^[ \t]*(?:#+[ \t]*)?(Inclusion|Exclusion)(?:[ \t]+Criteria)?[ \t]*:?[ \t]*$", source.text, re.M | re.I))
     if not headings or source.text[:headings[0].start()].strip():
         raise HTTPException(422, "Criteria require source review before section extraction.")
+    try:
+        passages = source_interpretation.inventory(source)
+    except ValueError:
+        raise HTTPException(422, "Criteria require source review before section extraction.") from None
     units = []
     for i, heading in enumerate(headings):
         end = headings[i + 1].start() if i + 1 < len(headings) else len(source.text)
@@ -95,7 +101,12 @@ def sections(source):
         for block in grouped:
             text = heading.group() + "\n" + block
             part = replace(source, text=text)
-            messages = build_messages(part)
+            start = source.text.index(block, cursor, end)
+            stop = start + len(block)
+            selected = [p for p in passages if start <= p["start"] < p["end"] <= stop]
+            if not selected:
+                raise HTTPException(422, "Source sections do not provide complete coverage.")
+            messages = source_interpretation.messages(part, selected)
             bound = sum(len(m["content"].encode()) + 256 for m in messages)
             if bound > MAX_INPUT_TOKENS:
                 raise HTTPException(422, "Section exceeds safe input limit.")
@@ -104,9 +115,12 @@ def sections(source):
             units.append({"source": part, "messages": messages, "input_limit": bound,
                           "source_start": start, "source_end": cursor,
                           "heading_start": heading.start(), "heading_end": heading.end(),
-                          "body_offset": len(heading.group()) + 1})
+                          "body_offset": len(heading.group()) + 1, "passages": selected})
     if not units or len(units) > MAX_SECTIONS:
         raise HTTPException(422, "Source exceeds the visitor request limit; source review required.")
+    assigned = [p["source_id"] for unit in units for p in unit["passages"]]
+    if len(assigned) != len(set(assigned)) or set(assigned) != {p["source_id"] for p in passages}:
+        raise HTTPException(422, "Source sections do not provide complete passage coverage.")
     coverage = {i for unit in units for i in range(unit["source_start"], unit["source_end"])}
     if any(not char.isspace() and i not in coverage and not any(h.start() <= i < h.end() for h in headings)
            for i, char in enumerate(source.text)):
@@ -207,6 +221,10 @@ async def provider(messages, key, disconnected):
 
 VALIDATION_REASONS = {
     "incomplete_response": "The provider did not finish normally; its response may be truncated or filtered.",
+    "missing_interpretation": "A source passage has no interpretation; it remains unresolved and coverage is incomplete.",
+    "duplicate_interpretation": "A source passage has duplicate interpretations; neither is accepted.",
+    "unknown_source_segment": "The response refers to an unrecognized source passage.",
+    "ambiguous_interpretation_evidence": "Clinical evidence or a dependency quotation is absent or ambiguous in its source passage.",
     "schema_error": "The model response does not match the required criteria and evidence schema.",
     "invalid_json_or_schema": "The model response is not valid, unique-key structured criteria JSON.",
     "unsupported_original_text": "A quotation does not match the exact source text and character offsets.",
@@ -235,7 +253,7 @@ VALIDATION_REASONS = {
 def safe_diagnostics(errors):
     diagnostics = []
     seen = set()
-    allowed = set(CLINICAL_FIELDS) | {"criteria", "evidence", "original_span", "polarity_span", "fields", "start", "end", "$", "[unexpected]"}
+    allowed = set(CLINICAL_FIELDS) | {"criteria", "evidence", "original_span", "polarity_span", "fields", "start", "end", "$", "[unexpected]", "interpretations", "source_id", "quotation"}
     categories = {"missing_required_property", "unexpected_property", "incorrect_type", "invalid_enum_value", "invalid_value", "dependency_structure", "malformed_json", "duplicate_json_key", "duplicate_evidence_id", "invalid_structure", "incomplete_response"}
     for error in errors:
         code = error.get("code")
@@ -260,6 +278,8 @@ async def extract(plan, key, disconnected):
     results = []
     requests_sent = 0
     timestamp = datetime.now(timezone.utc).isoformat()
+    inventory = source_interpretation.inventory(plan["source"])
+    coverage = {p["source_id"]: dict(p, interpretation_status="not_requested", unresolved_reason="not_requested") for p in inventory}
     for index, unit in enumerate(plan["units"]):
         if disconnected.is_set() or time.monotonic() >= plan.get("key_deadline", float("inf")):
             break
@@ -268,6 +288,21 @@ async def extract(plan, key, disconnected):
         try:
             requests_sent += 1
             content = await provider(unit["messages"], key, disconnected)
+            try:
+                decoded = json.loads(content)
+            except (ValueError, TypeError, RecursionError):
+                decoded = None
+            if isinstance(decoded, dict) and "interpretations" in decoded:
+                criteria, source_evidence, records, errors = source_interpretation.interpret(content, plan["source"], unit["passages"], timestamp)
+                for record in records:
+                    coverage[record["source_id"]] = record
+                results.append({"section": index + 1, "status": "failed" if errors else "validated",
+                    "error": "source_validation_failed" if errors else None, "diagnostics": safe_diagnostics(errors),
+                    "source_start": unit["source_start"], "source_end": unit["source_end"],
+                    "source_evidence": source_evidence, "criteria": criteria})
+                if errors:
+                    break
+                continue
             model, errors = validate_extraction(content, unit["source"], method="visitor-section-v1", timestamp=timestamp, allow_unresolved_logic=True)
             if errors and not any(error["code"] in ("schema_error", "invalid_json_or_schema") for error in errors):
                 content = reanchor_exact_spans(content, unit["source"])
@@ -289,11 +324,20 @@ async def extract(plan, key, disconnected):
                     node["criterion_id"] = f"section-{index + 1}:{node['criterion_id']}"
                     identify(node["dependencies"] or [])
             identify(criteria)
+            for passage in inventory:
+                if unit["source_start"] <= passage["start"] < passage["end"] <= unit["source_end"]:
+                    def unresolved(nodes):
+                        return any(node["logical_operator"] is None or unresolved(node["dependencies"] or []) for node in nodes)
+                    needs_review = passage["scope_ambiguous"] or passage["boundary_ambiguous"] or unresolved(criteria)
+                    coverage[passage["source_id"]].update(interpretation_status="unresolved" if needs_review else "validated",
+                        unresolved_reason="legacy_interpretation_requires_review" if needs_review else None)
             results.append({"section": index + 1, "status": "validated", "source_start": unit["source_start"],
                             "source_end": unit["source_end"], "source_evidence": evidence,
                             "exact_offsets_reanchored": offsets_reanchored,
                             "criteria": criteria})
         except NebiusError as error:
+            for passage in unit["passages"]:
+                coverage[passage["source_id"]].update(interpretation_status="not_interpreted", unresolved_reason="section_failed")
             if error.code == "invalid_structured_json":
                 errors = [{"code": "invalid_json_or_schema", "field": "$", "category": "malformed_json"}]
             elif error.code == "incomplete_response":
@@ -316,7 +360,11 @@ async def extract(plan, key, disconnected):
                                             timestamp=timestamp, allow_unresolved_logic=True)
         complete = merged is not None and not errors
         merge_errors = safe_diagnostics(errors)
-    return {"status": "complete" if complete else "incomplete",
+    unresolved_count = sum(row["interpretation_status"] == "unresolved" for row in coverage.values())
+    return {"status": "review_required" if complete and unresolved_count else "complete" if complete else "incomplete",
+            "source": {"nct_id": plan["source"].nct_id, "snapshot_sha256": plan["source"].sha256, "source_snapshot": plan["source"].source_snapshot},
+            "source_inventory_complete": True, "source_passages": list(coverage.values()),
+            "interpretation_complete": complete and not unresolved_count, "unresolved_count": unresolved_count,
             "validation_diagnostics_version": DIAGNOSTICS_VERSION, "extraction_prompt_version": PROMPT_VERSION,
             "sections": results, "merge_diagnostics": merge_errors, "human_review_required": True, "executable_mapping": False,
             "merged_criteria": merged.model_dump(mode="json")["criteria"] if complete else [],

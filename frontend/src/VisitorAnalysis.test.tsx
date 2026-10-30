@@ -135,3 +135,25 @@ test.each([
   expect(screen.queryByLabelText('Connect Nebius API Key')).not.toBeInTheDocument()
   expect(fetcher).toHaveBeenCalledTimes(1)
 })
+
+
+test('source inventory stays visible when interpretations are missing or unresolved', async () => {
+  const result = { status: 'incomplete', source_inventory_complete: true, interpretation_complete: false,
+    full_source_coverage_validated: false, source_passages: [
+      { source_id: 'source-20-48', start: 20, end: 48, text: '  1. A AND (B OR C)', interpretation_status: 'unresolved', unresolved_reason: 'logic_requires_review' },
+      { source_id: 'source-49-70', start: 49, end: 70, text: '2. Original omitted passage', interpretation_status: 'not_requested', unresolved_reason: 'not_requested' },
+    ], sections: [{ section: 1, status: 'failed', criteria: [] }, { section: 2, status: 'not_requested', criteria: [] }] }
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(quote))).mockResolvedValueOnce(new Response(JSON.stringify(result)))
+  vi.stubGlobal('fetch', fetcher)
+  render(<VisitorAnalysis trial={trial} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Run NVIDIA Analysis' }))
+  fireEvent.change(await screen.findByLabelText('Connect Nebius API Key'), { target: { value: 'non-secret-inventory-fixture' } })
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve cost and analyze' }))
+  expect(await screen.findByText(/Original source inventory: complete/)).toHaveTextContent('Clinical interpretation: incomplete or unresolved.')
+  fireEvent.click(screen.getByText('Original passages and interpretation coverage (2)'))
+  expect(screen.getByText('2. Original omitted passage')).toBeVisible()
+  expect(screen.getByText('Requires review: logic requires review.')).toBeVisible()
+  expect(screen.getByText('Full source coverage: incomplete or unverified.')).toBeVisible()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})

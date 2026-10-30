@@ -236,7 +236,7 @@ def validate_extraction(
                 skeleton += source.text[cursor:span.end]
                 if node.cohort and skeleton.startswith(node.cohort + ":"):
                     skeleton = skeleton[len(node.cohort) + 1:]
-                skeleton = re.sub(r"^\s*[-*•]\s*", "", skeleton)
+                skeleton = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", skeleton)
                 tokens = re.findall(r"x\d+|\bAND\b|\bOR\b|[()]|\S+", skeleton, re.IGNORECASE)
                 tokens = [token.upper() if token.lower() in ("and", "or") else token for token in tokens]
                 try:

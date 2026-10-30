@@ -7,6 +7,6 @@ export function openResearchSection(name = 'Research Tools') {
 }
 
 export function openDemo() {
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Evidence Review' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('button', { name: 'Evidence Review Demo' }))
   fireEvent.click(screen.getByRole('button', { name: 'Try a Demo' }))
 }

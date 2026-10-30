@@ -107,6 +107,7 @@
 !/backend/app/trial_extraction_api.py
 !/backend/app/trial_parser.py
 !/backend/app/trial_source.py
+!/backend/app/source_interpretation.py
 !/backend/app/visitor_extraction.py
 !/backend/benchmark_eligibility.py
 !/backend/demo_smoke.py
